@@ -1,0 +1,8 @@
+# ML models folder
+/ml_models/ @ml-team
+
+# Data engineering folder
+/data/ @data-team
+
+# Frontend folder
+/frontend/ @frontend-team

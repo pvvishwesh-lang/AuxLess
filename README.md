@@ -39,6 +39,12 @@ A real-time, multi user music recommendation system designed for social settings
 
 ---
 
+## App Flow
+
+![The flow of the app](https://github.com/pvvishwesh-lang/passtheaux/blob/main/docs/MLOps_HLD.png)
+
+---
+
 ## Privacy
 - User consented data only
 - Session based processing

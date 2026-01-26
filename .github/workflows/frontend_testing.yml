@@ -30,11 +30,12 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v4
         with: 
-          python-version: '20'
+          node-version: '20'
 
       - name: Install Dependencies
+        working-directory: tests/frontend_tests
         run: npm ci
 
       - name: Run tests
+        working-directory: tests/frontend_tests
         run: npm test
-      

@@ -39,6 +39,6 @@ jobs:
           pip install pytest
 
       - name: Run tests
-        run: pytest tests/test_model.py
+        run: pytest tests/ml_tests/test_model.py
       
       

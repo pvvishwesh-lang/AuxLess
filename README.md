@@ -1,4 +1,4 @@
-# PassTheAux
+# AuxLess
 
 ## Party Music Recommendation System
 

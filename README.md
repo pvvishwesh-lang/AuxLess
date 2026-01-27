@@ -26,7 +26,7 @@ A real-time, multi user music recommendation system designed for social settings
 ## Tech Stack
 - Backend: Python
 - ML: Scikit-Learn/PyTorck
-- API: Spotify Web API
+- API: Web API of any music application
 - Frontend: React
 - Auth: OAuth 2.0
 

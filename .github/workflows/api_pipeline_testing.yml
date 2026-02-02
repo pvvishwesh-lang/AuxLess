@@ -26,5 +26,6 @@ jobs:
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
           REDIRECT_URIS: ${{ secrets.REDIRECT_URIS }}
           TOKEN_URI: ${{ secrets.TOKEN_URI }}
+          PROJECT_ID: ${{ secrets.PROJECT_ID }}
         run: |
-          python backend/pipelines/Api_Puller.py --runner=DirectRunner
+          python backend/pipelines/Api_Puller.py

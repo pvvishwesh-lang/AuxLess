@@ -106,17 +106,19 @@ class ReadFromAPI(beam.DoFn):
         self.client_secret=client_secret
         self.redirect_uri=redirect_uri
         self.refresh_token=refresh_token
+
+    def setup(self):
+        self.Aapd=Authorization_And_Playlistdata(token_uri=self.token_uri,client_id=self.client_id,client_secret=self.client_secret,redirect_uri=self.redirect_uri,refresh_token=self.refresh_token)
     
     def process(self,element):
-        Aapd=Authorization_And_Playlistdata(token_uri=self.token_uri,client_id=self.client_id,client_secret=self.client_secret,redirect_uri=self.redirect_uri,refresh_token=self.refresh_token)
-        playlists=Aapd.get_playlists()
+        playlists=self.get_playlists()
         for playlist in playlists:
             playlist_name=playlist['snippet']['title']
             playlist_id=playlist['id']
-            tracks=Aapd.get_playlist_tracks(playlist_id)
+            tracks=self.get_playlist_tracks(playlist_id)
             for track in tracks:
                 track_title=track['snippet']['title']
-                genre,artist_name=Aapd.get_genre(track_title)
+                genre,artist_name=self.get_genre(track_title)
                 yield {
                     'playlist_name':playlist_name,
                     'track_title':track_title,
@@ -141,7 +143,6 @@ with beam.Pipeline(options=options) as p:
         p
         |'Seed'>>beam.Create([None])
         |'Read From API'>>beam.ParDo(ReadFromAPI(refresh_token=os.environ['YOUTUBE_REFRESH_TOKEN'],token_uri=os.environ['TOKEN_URI'],client_id=os.environ['CLIENT_ID'],client_secret=os.environ['CLIENT_SECRET'],redirect_uri=os.environ['REDIRECT_URIS']))
-        |'Print'>>beam.Map(print)
-    )
+        |'WriteToGCS'>> beam.io.textio.WriteToFiles(path='gs://youtube-pipeline-staging-bucket/Final_Output',file_name_suffix='.csv')
 
 

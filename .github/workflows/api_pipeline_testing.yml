@@ -17,7 +17,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install apache-beam requests pynacl flask
+          pip install apache-beam requests pynacl flask apache-beam[gcp] google-auth
 
       - name: Run Beam pipeline
         env:

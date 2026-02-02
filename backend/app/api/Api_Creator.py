@@ -1,71 +1,62 @@
-from fastapi import FastAPI,Header,HTTPException,Depends
-import pandas as pd
+from flask import Flask, redirect, request
+import requests, os, base64
+from nacl import encoding, public
 
-app=FastAPI()
+app = Flask(__name__)
 
-@app.get('/')
-def home():
-    return {'Api Running'}
+GITHUB_TOKEN = os.environ['GH_TOKEN']
+REPO = "pvvishwesh-lang/AuxLess"  
+CLIENT_ID = os.environ['CLIENT_ID']
+CLIENT_SECRET = os.environ['CLIENT_SECRET']
+REDIRECT_URI = os.environ['REDIRECT_URIS']
 
+@app.route("/login")
+def login():
+    auth_url = (
+        "https://accounts.google.com/o/oauth2/v2/auth?"
+        f"client_id={CLIENT_ID}&"
+        f"redirect_uri={REDIRECT_URI}&"
+        "response_type=code&"
+        "scope=https://www.googleapis.com/auth/youtube.readonly&"
+        "access_type=offline"
+    )
+    return redirect(auth_url)
 
-df=pd.read_csv('/Users/vishweshpv/Coding/Project/My_Playlist.csv')
-df['Genres'].fillna('Unknown',inplace=True)
-
-
-def authentication(authorization:str=Header(None)):
-    if not authorization:
-        raise HTTPException(status_code=401,detail='Unauthorized')
-    return authorization.replace('Bearer','')
-
-@app.get('/v1/me/top/tracks')
-def get_top_tracks(token:str=Depends(authentication)):
-    user_id=token
-    user_df=df[df['Added By']==user_id] if 'Added By' in df else df
-    tracks=[]
-    for _,row in user_df.iterrows():
-        tracks.append({
-            'id':f"mock_{hash(row['Track Name'])}",
-            'name':row['Track Name'],
-            'duration_ms':int(row['Duration (ms)']),
-            'explicit':bool(row['Explicit']),
-            'popularity':int(row['Popularity']),
-            'artists':[
-                {'name':a.strip()}
-                for a in row['Artist Name(s)'].split(',')
-            ],
-            'genres':row['Genres'].split(','),
-            'audio_features':{
-                'danceability':row['Danceability'],
-                'energy':row['Energy'],
-                'valence':row['Valence'],
-                'tempo':row['Tempo']
-            }
-        })
-    return {
-        'items':tracks,
-        'total':len(tracks)
+@app.route("/callback")
+def callback():
+    code = request.args.get("code")
+    token_url = "https://oauth2.googleapis.com/token"
+    data = {
+        "code": code,
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "redirect_uri": REDIRECT_URI,
+        "grant_type": "authorization_code"
     }
+    res = requests.post(token_url, data=data)
+    tokens = res.json()
+    access_token = tokens['access_token']
+    refresh_token = tokens.get('refresh_token')
 
-@app.get('/v1/audio-features')
-def audio_features(track_ids:str):
-    ids=track_ids.split(',')
-    features=[]
-    for track_id in ids:
-        row=df.iloc[abs(hash(track_id))%len(df)]
-        features.append({
-            'id':track_id,
-            'danceability':row['Danceability'],
-            'energy':row['Energy'],
-            'key':row['Key'],
-            'loudness':row['Loudness'],
-            'mode':row['Mode'],
-            'speechiness':row['Speechiness'],
-            'acousticness':row['Acousticness'],
-            'instrumentalness':row['Instrumentalness'],
-            'liveness':row['Liveness'],
-            'valence':row['Valence'],
-            'tempo':row['Tempo'],
-            'time_signature':row['Time Signature']
-        })
-    return {'audio_features':features}
+    url = f"https://api.github.com/repos/{REPO}/actions/secrets/YOUTUBE_REFRESH_TOKEN"
+    
+    key_url = f"https://api.github.com/repos/{REPO}/actions/secrets/public-key"
+    r = requests.get(key_url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+    r.raise_for_status()
+    key_data = r.json()
+    public_key = key_data["key"]
+    key_id = key_data["key_id"]
 
+    def encrypt_secret(public_key: str, secret_value: str) -> str:
+        public_key = public.PublicKey(public_key.encode("utf-8"), encoding.Base64Encoder())
+        sealed_box = public.SealedBox(public_key)
+        encrypted = sealed_box.encrypt(secret_value.encode("utf-8"))
+        return base64.b64encode(encrypted).decode("utf-8")
+
+    encrypted_value = encrypt_secret(public_key, refresh_token)
+
+    payload = {"encrypted_value": encrypted_value, "key_id": key_id}
+    r = requests.put(url, headers={"Authorization": f"token {GITHUB_TOKEN}"}, json=payload)
+    r.raise_for_status()
+
+    return "Refresh token saved to GitHub Secrets successfully!"

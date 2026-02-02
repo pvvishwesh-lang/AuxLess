@@ -130,6 +130,7 @@ options = PipelineOptions()
 google_cloud_options = options.view_as(GoogleCloudOptions)
 google_cloud_options.project = os.environ['PROJECT_ID']
 google_cloud_options.job_name = "youtube-pipeline"
+google_cloud_options.region='us-east1'
 google_cloud_options.staging_location = "gs://youtube-pipeline-staging-bucket/staging"
 google_cloud_options.temp_location = "gs://youtube-pipeline-staging-bucket/temp"
 options.view_as(StandardOptions).runner = "DataflowRunner"

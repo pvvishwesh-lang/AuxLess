@@ -19,6 +19,12 @@ jobs:
         run: |
           pip install apache-beam requests pynacl flask apache-beam[gcp] google-auth
 
+      - name: Authenticate with GCP
+        uses: google-github-actions/auth@v1
+        with:
+            credentials_json: ${{ secrets.GCP_SECRET_KEY }}
+
+
       - name: Run Beam pipeline
         env:
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}

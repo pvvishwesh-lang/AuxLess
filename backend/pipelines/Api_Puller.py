@@ -3,7 +3,7 @@ import requests
 import os
 import json
 import re
-
+from apache_beam.options.pipeline_options import PipelineOptions, GoogleCloudOptions, StandardOptions
 
 class Authorization_And_Playlistdata(beam.DoFn):
     def __init__(self,token_uri,client_id,client_secret,redirect_uri,refresh_token):
@@ -125,7 +125,16 @@ class ReadFromAPI(beam.DoFn):
                     'genre':genre
                 }
 
-with beam.Pipeline() as p:
+
+options = PipelineOptions()
+google_cloud_options = options.view_as(GoogleCloudOptions)
+google_cloud_options.project = os.environ['PROJECT_ID']
+google_cloud_options.job_name = "youtube-pipeline"
+google_cloud_options.staging_location = "gs://youtube-pipeline-staging-bucket/staging"
+google_cloud_options.temp_location = "gs://youtube-pipeline-staging-bucket/temp"
+options.view_as(StandardOptions).runner = "DataflowRunner"
+
+with beam.Pipeline(options=options) as p:
     data=(
         p
         |'Seed'>>beam.Create([None])

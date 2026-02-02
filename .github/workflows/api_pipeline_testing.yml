@@ -17,7 +17,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install apache-beam requests
+          pip install apache-beam requests pynacl
 
       - name: Run Beam pipeline
         env:

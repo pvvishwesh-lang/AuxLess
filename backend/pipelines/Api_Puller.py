@@ -4,7 +4,7 @@ import os
 import json
 import re
 from apache_beam.options.pipeline_options import PipelineOptions, GoogleCloudOptions, StandardOptions
-from apache_beam.io import textio
+from apache_beam.io.textio import WriteToText
 import csv
 import io
 
@@ -156,7 +156,7 @@ with beam.Pipeline(options=options) as p:
         |'Seed'>>beam.Create([None])
         |'Read From API'>>beam.ParDo(ReadFromAPI(refresh_token=os.environ['YOUTUBE_REFRESH_TOKEN'],token_uri=os.environ['TOKEN_URI'],client_id=os.environ['CLIENT_ID'],client_secret=os.environ['CLIENT_SECRET'],redirect_uri=os.environ['REDIRECT_URIS']))
         |'ToCSV' >> beam.Map(dict_to_csv_line)
-        |'WriteToGCS'>> textio.WriteToFiles(path='gs://youtube-pipeline-staging-bucket/Final_Output',file_name_suffix='.csv')
+        |'WriteToGCS'>> WriteToText(path='gs://youtube-pipeline-staging-bucket/Final_Output',file_name_suffix='.csv')
     )
 
 

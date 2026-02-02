@@ -134,6 +134,7 @@ google_cloud_options.region='us-east1'
 google_cloud_options.staging_location = "gs://youtube-pipeline-staging-bucket/staging"
 google_cloud_options.temp_location = "gs://youtube-pipeline-staging-bucket/temp"
 options.view_as(StandardOptions).runner = "DataflowRunner"
+google_cloud_options.service_account_email='serviceaccountforgithub@main-shade-485500-a0.iam.gserviceaccount.com'
 
 with beam.Pipeline(options=options) as p:
     data=(

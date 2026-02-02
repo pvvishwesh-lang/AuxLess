@@ -17,7 +17,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install apache-beam requests pynacl
+          pip install apache-beam requests pynacl flask
+
+      - name: Run Api Script
+        run: |
+           python backend/app/api/Api_Creator.py
 
       - name: Run Beam pipeline
         env:

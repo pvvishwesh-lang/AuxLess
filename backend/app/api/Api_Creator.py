@@ -19,6 +19,7 @@ def login():
         "response_type=code&"
         "scope=https://www.googleapis.com/auth/youtube.readonly&"
         "access_type=offline"
+        "prompt=consent"
     )
     return redirect(auth_url)
 
@@ -37,6 +38,7 @@ def callback():
     tokens = res.json()
     access_token = tokens['access_token']
     refresh_token = tokens.get('refresh_token')
+    
 
     url = f"https://api.github.com/repos/{REPO}/actions/secrets/YOUTUBE_REFRESH_TOKEN"
     

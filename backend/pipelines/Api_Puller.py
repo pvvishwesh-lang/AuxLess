@@ -6,24 +6,26 @@ import re
 
 
 class Authorization_And_Playlistdata(beam.DoFn):
-    def __init__(self,token_uri,client_id,client_secret,redirect_uri,access_token):
+    def __init__(self,token_uri,client_id,client_secret,redirect_uri,refresh_token):
         self.token_uri=token_uri
         self.client_id=client_id
         self.client_secret=client_secret
         self.redirect_uri=redirect_uri
-        self.access_token=access_token
-    def exchange_code_for_api(self,code):
+        self.refresh_token=refresh_token
+        self.access_token=self.exchange_code_for_api()
+        
+    def exchange_code_for_api(self):
         url=self.token_uri
         data={
-        'code':code,
+        'refresh_token':self.refresh_token,
         'client_id':self.client_id,
         'client_secret':self.client_secret,
         'redirect_uri':self.redirect_uri,
-        'grant_type':'authorization_code'
+        'grant_type':'refresh_token'
         }
         res=requests.post(url,data=data)
         res.raise_for_status()
-        return res.json()
+        return res.json()['access_token']
 
     def get_playlists(self):
         url='https://www.googleapis.com/youtube/v3/playlists'
@@ -98,15 +100,15 @@ class Authorization_And_Playlistdata(beam.DoFn):
         return title.strip()
     
 class ReadFromAPI(beam.DoFn):
-    def __init__(self,access_token,token_uri,client_id,client_secret,redirect_uri):
+    def __init__(self,refresh_token,token_uri,client_id,client_secret,redirect_uri):
         self.token_uri=token_uri
         self.client_id=client_id
         self.client_secret=client_secret
         self.redirect_uri=redirect_uri
-        self.access_token=access_token
+        self.refresh_token=refresh_token
     
     def process(self,element):
-        Aapd=Authorization_And_Playlistdata(token_uri=self.token_uri,client_id=self.client_id,client_secret=self.client_secret,redirect_uri=self.redirect_uri,access_token=self.access_token)
+        Aapd=Authorization_And_Playlistdata(token_uri=self.token_uri,client_id=self.client_id,client_secret=self.client_secret,redirect_uri=self.redirect_uri,refresh_token=self.refresh_token)
         playlists=Aapd.get_playlists()
         for playlist in playlists:
             playlist_name=playlist['snippet']['title']
@@ -127,7 +129,7 @@ with beam.Pipeline() as p:
     data=(
         p
         |'Seed'>>beam.Create([None])
-        |'Read From API'>>beam.ParDo(ReadFromAPI(access_token=os.environ['YOUTUBE_REFRESH_TOKEN'],token_uri=os.environ['TOKEN_URI'],client_id=os.environ['CLIENT_ID'],client_secret=os.environ['CLIENT_SECRET'],redirect_uri=os.environ['REDIRECT_URIS']))
+        |'Read From API'>>beam.ParDo(ReadFromAPI(refresh_token=os.environ['YOUTUBE_REFRESH_TOKEN'],token_uri=os.environ['TOKEN_URI'],client_id=os.environ['CLIENT_ID'],client_secret=os.environ['CLIENT_SECRET'],redirect_uri=os.environ['REDIRECT_URIS']))
         |'Print'>>beam.Map(print)
     )
 

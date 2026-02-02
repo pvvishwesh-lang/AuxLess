@@ -156,7 +156,7 @@ with beam.Pipeline(options=options) as p:
         |'Seed'>>beam.Create([None])
         |'Read From API'>>beam.ParDo(ReadFromAPI(refresh_token=os.environ['YOUTUBE_REFRESH_TOKEN'],token_uri=os.environ['TOKEN_URI'],client_id=os.environ['CLIENT_ID'],client_secret=os.environ['CLIENT_SECRET'],redirect_uri=os.environ['REDIRECT_URIS']))
         |'ToCSV' >> beam.Map(dict_to_csv_line)
-        |'WriteToGCS'>> WriteToText(path='gs://youtube-pipeline-staging-bucket/Final_Output',file_name_suffix='.csv')
+        |'WriteToGCS'>> WriteToText(file_path_prefix='gs://youtube-pipeline-staging-bucket/Final_Output',file_name_suffix='.csv')
     )
 
 

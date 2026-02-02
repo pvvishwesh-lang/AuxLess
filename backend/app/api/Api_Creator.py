@@ -18,7 +18,7 @@ def login():
         f"redirect_uri={REDIRECT_URI}&"
         "response_type=code&"
         "scope=https://www.googleapis.com/auth/youtube.readonly&"
-        "access_type=offline"
+        "access_type=offline&"
         "prompt=consent"
     )
     return redirect(auth_url)

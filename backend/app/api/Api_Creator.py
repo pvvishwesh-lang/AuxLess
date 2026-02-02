@@ -1,3 +1,4 @@
+#RUN THiS Only ONCE A YEAR, AND ONLY IF PIPELINE FAILS. PIPELINE WILL TAKE CARE OF GETTING ACCESS TOKEN. THIS IS JUST FOR REFRESH TOKEN.
 from flask import Flask, redirect, request
 import requests, os, base64
 from nacl import encoding, public

@@ -5,6 +5,16 @@ import json
 import re
 from apache_beam.options.pipeline_options import PipelineOptions, GoogleCloudOptions, StandardOptions
 from apache_beam.io import fileio
+import csv
+import io
+
+
+def dict_to_csv_line(record):
+    columns = ['playlist_name', 'track_title', 'artist_name', 'video_id', 'genre']
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([record.get(col, "") for col in columns])
+    return output.getvalue().strip()
 
 
 class Authorization_And_Playlistdata(beam.DoFn):
@@ -145,6 +155,7 @@ with beam.Pipeline(options=options) as p:
         p
         |'Seed'>>beam.Create([None])
         |'Read From API'>>beam.ParDo(ReadFromAPI(refresh_token=os.environ['YOUTUBE_REFRESH_TOKEN'],token_uri=os.environ['TOKEN_URI'],client_id=os.environ['CLIENT_ID'],client_secret=os.environ['CLIENT_SECRET'],redirect_uri=os.environ['REDIRECT_URIS']))
+        |'ToCSV' >> beam.Map(dict_to_csv_line)
         |'WriteToGCS'>> fileio.WriteToFiles(path='gs://youtube-pipeline-staging-bucket/Final_Output',file_name_suffix='.csv')
     )
 

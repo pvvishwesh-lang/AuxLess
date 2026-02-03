@@ -150,6 +150,7 @@ class ReadFromAPI(beam.DoFn):
     def setup(self):
         self.Aapd=Authorization_And_Playlistdata(token_uri=self.token_uri,client_id=self.client_id,client_secret=self.client_secret,redirect_uri=self.redirect_uri,refresh_token=self.refresh_token)
         self.Aapd.setup()
+        self.genre_cache = {}
 
     def _retry_request(self,fn,retries=3,delay=2):
         last_exception=None
@@ -184,7 +185,12 @@ class ReadFromAPI(beam.DoFn):
             for track in track_rows:
                 track_title=track['snippet']['title']
                 video_id=track['snippet']['resourceId']['videoId']
-                genre,artist_name,country,collection_name,collection_id,trackTimeMillis=self._retry_request(lambda:self.Aapd.get_genre(track_title))
+                key = f"{track_title}"
+                if key in self.genre_cache:
+                    genre, artist_name, country, collection_name, collection_id, trackTimeMillis = self.genre_cache[key]
+                else:
+                    genre,artist_name,country,collection_name,collection_id,trackTimeMillis=self._retry_request(lambda:self.Aapd.get_genre(track_title))
+                    self.genre_cache[key] = (genre, artist_name, country, collection_name, collection_id, trackTimeMillis)
                 view_count,like_count,comment_count=stats_lookup.get(video_id,(0,0,0))
                 yield {
                     'playlist_name':playlist_name,
@@ -213,12 +219,19 @@ options.view_as(StandardOptions).runner = "DataflowRunner"
 google_cloud_options.service_account_email='serviceaccountforgithub@main-shade-485500-a0.iam.gserviceaccount.com'
 
 with beam.Pipeline(options=options) as p:
+    header = ','.join(['playlist_name', 'track_title', 'artist_name', 'video_id', 'genre','country','collection_name','collection_id','trackTimeMillis', 'view_count','like_count','comment_count'])
     data=(
         p
         |'Seed'>>beam.Create([None])
         |'Read From API'>>beam.ParDo(ReadFromAPI(refresh_token=os.environ['YOUTUBE_REFRESH_TOKEN'],token_uri=os.environ['TOKEN_URI'],client_id=os.environ['CLIENT_ID'],client_secret=os.environ['CLIENT_SECRET'],redirect_uri=os.environ['REDIRECT_URIS']))
         |'ToCSV' >> beam.Map(dict_to_csv_line)
-        |'WriteToGCS'>> WriteToText(file_path_prefix='gs://youtube-pipeline-staging-bucket/Final_Output',file_name_suffix='.csv')
     )
+    header_pcoll = (
+        p | 'Header' >> beam.Create([header])
+    )
+    final_csv = (
+        (header_pcoll, data) | beam.Flatten()
+    )
+    final_csv |'WriteToGCS'>> WriteToText(file_path_prefix='gs://youtube-pipeline-staging-bucket/Final_Output',file_name_suffix='.csv',shard_name_template='')
 
 

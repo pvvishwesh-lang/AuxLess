@@ -2,7 +2,9 @@ import apache_beam as beam
 from time import sleep
 from backend.pipelines.api.youtube_client import YoutubeClient
 from backend.pipelines.api.itunes_client import ItunesClient
+import logging
 
+logging.basicConfig(level=logging.INFO)
 
 
 class ReadFromAPI(beam.DoFn):
@@ -21,16 +23,21 @@ class ReadFromAPI(beam.DoFn):
                 return fn()
             except Exception as e:
                 last_exception=e
+                logging.warning(f"Retry {i+1}/{retries} failed: {e}")
                 sleep(delay*(2**i))
+        logging.error(f"All retries failed: {last_exception}")
         raise last_exception
                 
         
     def process(self,element):
+        logging.info("Fetching playlists from YouTube...")
         playlists=self.youtube.get_playlists()
+        logging.info(f"Total playlists fetched: {len(playlists)}")
         for playlist in playlists:
             playlist_name=playlist['snippet']['title']
             playlist_id=playlist['id']
             tracks=self.youtube.get_playlist_tracks(playlist_id)
+            logging.info(f"Playlist '{playlist_name}' has {len(tracks)} tracks")
             track_rows=[]
             video_ids=[]
             for track in tracks:

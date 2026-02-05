@@ -4,6 +4,7 @@ from apache_beam.io.textio import WriteToText
 from backend.pipelines.api.auth import GoogleAuthClient
 from backend.pipelines.api.youtube_client import YoutubeClient
 from backend.pipelines.api import ReadFromAPI
+from backend.pipelines.api.csv_writer import CSVWriter 
 
 
 options = PipelineOptions()
@@ -26,7 +27,8 @@ def run():
         refresh_token=os.environ["YOUTUBE_REFRESH_TOKEN"]
     )
     access_token=auth.get_access_token()
-    yt_client=YouTubeClient(access_token)
+    yt_client=YoutubeClient(access_token)
+    csv_client=CSVWriter()
     
     with beam.Pipeline(options=options) as p:
         header = ','.join(['playlist_name', 'track_title', 'artist_name', 'video_id', 'genre','country','collection_name','collection_id','trackTimeMillis', 'view_count','like_count','comment_count'])
@@ -34,7 +36,7 @@ def run():
             p
             |'Seed'>>beam.Create([None])
             |'Read From API'>>beam.ParDo(ReadFromAPI())
-            |'ToCSV' >> beam.Map(dict_to_csv_line)
+            |'ToCSV' >> beam.Map(csv_client.dict_to_csv_line)
         )
         header_pcoll = (
             p | 'Header' >> beam.Create([header])

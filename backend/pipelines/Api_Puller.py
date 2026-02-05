@@ -8,7 +8,7 @@ from backend.pipelines.api.csv_writer import CSVWriter
 import os
 
 
-options = PipelineOptions()
+options = PipelineOptions("--setup_file=./setup.py")
 google_cloud_options = options.view_as(GoogleCloudOptions)
 google_cloud_options.project = os.environ['PROJECT_ID']
 google_cloud_options.job_name = "youtube-pipeline"

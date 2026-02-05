@@ -33,17 +33,12 @@ def run():
     columns=['playlist_name', 'track_title', 'artist_name', 'video_id', 'genre','country','collection_name','collection_id','trackTimeMillis', 'view_count','like_count','comment_count']
     
     with beam.Pipeline(options=options) as p:
-        header = ','.join(columns)
         data=(
             p
             |'Seed'>>beam.Create([None])
             |'Read From API'>>beam.ParDo(ReadFromAPI(access_token))
             |'ToCSV' >> beam.Map(lambda r: dict_to_csv_line(r, columns))
-        )
-        (
-            [p | 'Header' >> beam.Create([header]),data]
-            | 'Flatten CSV' >> beam.Flatten()
-            |'WriteToGCS'>> WriteToText(file_path_prefix='gs://youtube-pipeline-staging-bucket/Final_Output',file_name_suffix='.csv',shard_name_template='')
+            |'WriteToGCS'>> WriteToText(file_path_prefix='gs://youtube-pipeline-staging-bucket/Final_Output',file_name_suffix='.csv',shard_name_template='',header=','.join(columns))
         )
 
 

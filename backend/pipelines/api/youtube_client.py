@@ -1,7 +1,7 @@
 import requests
 
 class YoutubeClient:
-    def __inti__(self,access_token):
+    def __init__(self,access_token):
         self.headers={'Authorization':f'Bearer {access_token}'}
 
     def get_playlists(self):

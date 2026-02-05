@@ -17,7 +17,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install apache-beam requests pynacl flask apache-beam[gcp] google-auth
+          pip install requests pynacl flask apache-beam[gcp] google-auth google-cloud-aiplatform
 
       - name: Authenticate with GCP
         uses: google-github-actions/auth@v1

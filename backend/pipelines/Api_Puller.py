@@ -4,7 +4,7 @@ from apache_beam.io.textio import WriteToText
 from backend.pipelines.api.auth import GoogleAuthClient
 from backend.pipelines.api.youtube_client import YoutubeClient
 from backend.pipelines.api.ReadFromAPI import ReadFromAPI
-from backend.pipelines.api.csv_writer import CSVWriter 
+from backend.pipelines.api.csv_writer import dict_to_csv_line 
 import os
 
 
@@ -38,7 +38,7 @@ def run():
             p
             |'Seed'>>beam.Create([None])
             |'Read From API'>>beam.ParDo(ReadFromAPI(access_token))
-            |'ToCSV' >> beam.Map(csv_client.dict_to_csv_line)
+            |'ToCSV' >> beam.Map(lambda r: dict_to_csv_line(r, columns))
         )
         header_pcoll = (
             p | 'Header' >> beam.Create([header])

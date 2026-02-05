@@ -24,6 +24,8 @@ jobs:
         with:
             credentials_json: ${{ secrets.GCP_SECRET_KEY }}
 
+      - name: Set PYTHONPATH
+        run: echo "PYTHONPATH=$GITHUB_WORKSPACE" >> $GITHUB_ENV
 
       - name: Run Beam pipeline
         env:

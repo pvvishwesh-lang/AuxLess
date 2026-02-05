@@ -33,7 +33,7 @@ def run():
         data=(
             p
             |'Seed'>>beam.Create([None])
-            |'Read From API'>>beam.ParDo(ReadFromAPI()
+            |'Read From API'>>beam.ParDo(ReadFromAPI())
             |'ToCSV' >> beam.Map(dict_to_csv_line)
         )
         header_pcoll = (

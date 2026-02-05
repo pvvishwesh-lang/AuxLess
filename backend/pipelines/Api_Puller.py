@@ -5,6 +5,7 @@ from backend.pipelines.api.auth import GoogleAuthClient
 from backend.pipelines.api.youtube_client import YoutubeClient
 from backend.pipelines.api import ReadFromAPI
 from backend.pipelines.api.csv_writer import CSVWriter 
+import os
 
 
 options = PipelineOptions()

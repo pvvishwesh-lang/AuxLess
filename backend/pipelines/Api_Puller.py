@@ -30,7 +30,6 @@ def run():
     )
     access_token=auth.get_access_token()
     yt_client=YoutubeClient(access_token)
-    csv_client=CSVWriter()
     
     with beam.Pipeline(options=options) as p:
         header = ','.join(['playlist_name', 'track_title', 'artist_name', 'video_id', 'genre','country','collection_name','collection_id','trackTimeMillis', 'view_count','like_count','comment_count'])

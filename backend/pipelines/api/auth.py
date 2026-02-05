@@ -17,4 +17,4 @@ class GoogleAuthClient:
         }
         res=requests.post(self.token_uri,data=payload)
         res.raise_for_status()
-        return res.json['access_token']
+        return res.json()['access_token']

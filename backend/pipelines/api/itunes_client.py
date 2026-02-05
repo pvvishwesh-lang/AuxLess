@@ -1,8 +1,6 @@
 import requests
 
 class ItunesClient:
-    def __init__(self,track_title):
-        self.track_title=track_title
         
     def get_genre(self,track_title,artist_name='',country='',collection_name='',collection_id='',trackTimeMillis=''):
         try:

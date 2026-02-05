@@ -2,7 +2,7 @@ import apache_beam as beam
 from apache_beam.options.pipeline_options import PipelineOptions, GoogleCloudOptions, StandardOptions
 from apache_beam.io.textio import WriteToText
 from backend.pipelines.api.auth import GoogleAuthClient
-from backend.pipelines.api.youtube_client import YouTubeClient
+from backend.pipelines.api.youtube_client import YoutubeClient
 from backend.pipelines.api import ReadFromAPI
 
 

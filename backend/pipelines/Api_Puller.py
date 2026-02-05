@@ -30,9 +30,10 @@ def run():
     )
     access_token=auth.get_access_token()
     yt_client=YoutubeClient(access_token)
+    columns=['playlist_name', 'track_title', 'artist_name', 'video_id', 'genre','country','collection_name','collection_id','trackTimeMillis', 'view_count','like_count','comment_count']
     
     with beam.Pipeline(options=options) as p:
-        header = ','.join(['playlist_name', 'track_title', 'artist_name', 'video_id', 'genre','country','collection_name','collection_id','trackTimeMillis', 'view_count','like_count','comment_count'])
+        header = ','.join(columns)
         data=(
             p
             |'Seed'>>beam.Create([None])

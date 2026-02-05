@@ -49,3 +49,5 @@ def run():
         final_csv |'WriteToGCS'>> WriteToText(file_path_prefix='gs://youtube-pipeline-staging-bucket/Final_Output',file_name_suffix='.csv',shard_name_template='')
 
 
+if __name__=="__main__":
+    run()

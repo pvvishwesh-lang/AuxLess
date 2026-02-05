@@ -19,6 +19,7 @@ options.view_as(StandardOptions).runner = "DataflowRunner"
 google_cloud_options.service_account_email='serviceaccountforgithub@main-shade-485500-a0.iam.gserviceaccount.com'
 
 
+
 def run():
     auth = GoogleAuthClient(
         token_uri=os.environ["TOKEN_URI"],
@@ -36,7 +37,7 @@ def run():
         data=(
             p
             |'Seed'>>beam.Create([None])
-            |'Read From API'>>beam.ParDo(ReadFromAPI())
+            |'Read From API'>>beam.ParDo(ReadFromAPI(access_token))
             |'ToCSV' >> beam.Map(csv_client.dict_to_csv_line)
         )
         header_pcoll = (

@@ -40,13 +40,11 @@ def run():
             |'Read From API'>>beam.ParDo(ReadFromAPI(access_token))
             |'ToCSV' >> beam.Map(lambda r: dict_to_csv_line(r, columns))
         )
-        header_pcoll = (
-            p | 'Header' >> beam.Create([header])
+        (
+            [p | 'Header' >> beam.Create([header]),data]
+            | 'Flatten CSV' >> beam.Flatten()
+            |'WriteToGCS'>> WriteToText(file_path_prefix='gs://youtube-pipeline-staging-bucket/Final_Output',file_name_suffix='.csv',shard_name_template='')
         )
-        final_csv = (
-            (header_pcoll, data) | beam.Flatten()
-        )
-        final_csv |'WriteToGCS'>> WriteToText(file_path_prefix='gs://youtube-pipeline-staging-bucket/Final_Output',file_name_suffix='.csv',shard_name_template='')
 
 
 if __name__=="__main__":

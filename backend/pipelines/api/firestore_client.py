@@ -1,7 +1,7 @@
 from google.cloud import firestore
 
 class FirestoreClient:
-    def __init__(self,project_id):
+    def __init__(self,project_id,database_id):
         self.db=firestore.Client(project=project_id,database=database_id)
         self.collection_name='users'
     

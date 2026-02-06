@@ -1,0 +1,24 @@
+name: Add YT User to Firestore
+on:
+  workflow_dispatch:
+
+jobs:
+  add-user:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install google-cloud-firestore
+
+      - name: Run add_user_to_firestore
+        env:
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          PROJECT_ID: ${{ secrets.PROJECT_ID }}
+          YT_USER_ID: my_google_account
+        run: python test.py

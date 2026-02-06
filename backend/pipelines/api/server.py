@@ -3,7 +3,7 @@ from backend.pipelines.run_all_users import main as run_all_users
 
 app = Flask(__name__)
 
-@app.route("/run_pipeline", methods=["POST"])
+@app.route("/run_pipeline", methods=["POST","GET"])
 def run_pipeline():
     try:
         run_all_users()

@@ -21,10 +21,11 @@ def combine_gcs_files(bucket_name,input_prefix,output_file):
 
 def main():
     project_id=os.environ['PROJECT_ID']
+    database_id=os.environ['FIRESTORE_DATABASE']
     bucket_name='youtube-pipeline-staging-bucket'
     temp_prefix='user_outputs/'
     final_output='Final_Output/combined_playlist.csv'
-    fs_client=FirestoreClient(project_id)
+    fs_client=FirestoreClient(project_id,database_id)
     users=fs_client.get_all_users()
     for user_id,refresh_token in users:
         print(f'Running pipeline for {user_id}')

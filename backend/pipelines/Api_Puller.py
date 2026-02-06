@@ -5,6 +5,8 @@ from backend.pipelines.api.auth import GoogleAuthClient
 from backend.pipelines.api.youtube_client import YoutubeClient
 from backend.pipelines.api.ReadFromAPI import ReadFromAPI
 from backend.pipelines.api.csv_writer import dict_to_csv_line 
+from apache_beam.runners.runner import PipelineState
+from apache_beam.runners.dataflow import DataflowRunner
 import os
 
 
@@ -31,11 +33,13 @@ def run_pipeline_for_user(user_id,refresh_token,gcs_prefix):
     options.view_as(StandardOptions).runner = "DataflowRunner"
     google_cloud_options.service_account_email='serviceaccountforgithub@main-shade-485500-a0.iam.gserviceaccount.com'
     
-    with beam.Pipeline(options=options) as p:
-        (
+    p=beam.Pipeline(option=options)
+    (
             p
             |'Seed'>>beam.Create([None])
             |'Read From API'>>beam.ParDo(ReadFromAPI(access_token))
             |'ToCSV' >> beam.Map(lambda r: dict_to_csv_line(r, columns))
             |'WriteToGCS'>> WriteToText(file_path_prefix=f'gs://youtube-pipeline-staging-bucket/{gcs_prefix}{user_id}',file_name_suffix='.csv',shard_name_template='',header=','.join(columns))
-        )
+    )
+    result=p.run()
+    result.wait_until_finish()

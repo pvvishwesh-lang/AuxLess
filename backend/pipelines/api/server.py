@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from backend.pipelines.api.run_all_users import main as run_all_users
+from backend.pipelines.run_all_users import main as run_all_users
 
 app = Flask(__name__)
 

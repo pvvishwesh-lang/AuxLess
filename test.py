@@ -4,7 +4,7 @@ from google.cloud import firestore
 
 # Replace these with your actual environment variables
 USER_ID = os.environ.get("YT_USER_ID", "my_google_account")  # any identifier for this user
-REFRESH_TOKEN = os.environ.get("YT_REFRESH_TOKEN")  # GitHub secret or local env variable
+REFRESH_TOKEN = os.environ.get("YOUTUBE_REFRESH_TOKEN")  # GitHub secret or local env variable
 
 PROJECT_ID = os.environ.get("PROJECT_ID")  # your GCP project ID
 

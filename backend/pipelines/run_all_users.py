@@ -11,7 +11,11 @@ def combine_gcs_files(bucket_name,input_prefix,output_file):
     for blob in blobs:
         if blob.name.endswith('.csv'):
             combined_lines.extend(blob.download_as_text().splitlines())
-
+            
+    if not combined_lines:
+    raise RuntimeError(
+        f"No CSV files found in gs://{bucket_name}/{input_prefix}"
+    )
     header=combined_lines[0]
     body=[line for line in combined_lines if line!=header]
     combined_content='\n'.join([header]+body)

@@ -6,6 +6,7 @@ COPY . /app
 
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
+RUN pip install flask apache-beam[gcp] google-cloud-firestore requests
 
 EXPOSE 8080
 

@@ -2,7 +2,7 @@ from google.cloud import firestore
 
 class FirestoreClient:
     def __init__(self,project_id):
-        self.db=firestore.Client(project=project_id)
+        self.db=firestore.Client(project=project_id,database=database_id)
         self.collection_name='users'
     
     def add_users(self,user_id,refresh_token):

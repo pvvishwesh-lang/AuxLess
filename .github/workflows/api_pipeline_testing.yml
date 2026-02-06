@@ -17,7 +17,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests pynacl flask apache-beam[gcp] google-auth google-cloud-aiplatform
+          pip install --upgrade pip
+          pip install requests pynacl flask apache-beam[gcp] google-auth google-cloud-firestore google-cloud-storage
 
       - name: Authenticate with GCP
         uses: google-github-actions/auth@v1
@@ -29,11 +30,10 @@ jobs:
 
       - name: Run Beam pipeline
         env:
-          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
           REDIRECT_URIS: ${{ secrets.REDIRECT_URIS }}
           TOKEN_URI: ${{ secrets.TOKEN_URI }}
           PROJECT_ID: ${{ secrets.PROJECT_ID }}
         run: |
-          python backend/pipelines/Api_Puller.py
+          python backend/pipelines/run_all_users.py

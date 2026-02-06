@@ -1,17 +1,19 @@
 name: YouTube Beam Pipeline
 
 on:
-  workflow_dispatch:
+  push:
+    branches: 
+      - main
 
 jobs:
-  run-pipeline:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
         with:
           python-version: '3.10'
 
@@ -23,18 +25,17 @@ jobs:
       - name: Authenticate with GCP
         uses: google-github-actions/auth@v1
         with:
+            project_id: ${{ secrets.PROJECT_ID }}
             credentials_json: ${{ secrets.GCP_SECRET_KEY }}
 
-      - name: Set PYTHONPATH
-        run: echo "PYTHONPATH=$GITHUB_WORKSPACE" >> $GITHUB_ENV
-
-      - name: Run Beam pipeline
-        env:
-          CLIENT_ID: ${{ secrets.CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-          REDIRECT_URIS: ${{ secrets.REDIRECT_URIS }}
-          TOKEN_URI: ${{ secrets.TOKEN_URI }}
-          PROJECT_ID: ${{ secrets.PROJECT_ID }}
-          FIRESTORE_DATABASE: ${{ secrets.FIRESTORE_DATABASE }}
+      - name: Build and push Docker image
         run: |
-          python backend/pipelines/run_all_users.py
+          gcloud builds submit --tag gcr.io/${{ secrets.PROJECT_ID }} /youtube-backend
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy youtube-backend\
+            --image gcr.io/${{ secrets.PROJECT_ID }}/youtube-backend \
+            --region us-central1\
+            --platform managed\
+            --allow-unauthenticated

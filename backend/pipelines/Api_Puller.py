@@ -33,7 +33,7 @@ def run_pipeline_for_user(user_id,refresh_token,gcs_prefix):
     options.view_as(StandardOptions).runner = "DataflowRunner"
     google_cloud_options.service_account_email='serviceaccountforgithub@main-shade-485500-a0.iam.gserviceaccount.com'
     
-    p=beam.Pipeline(option=options)
+    p=beam.Pipeline(options=options)
     (
             p
             |'Seed'>>beam.Create([None])

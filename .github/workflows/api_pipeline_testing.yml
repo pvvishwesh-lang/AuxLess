@@ -35,5 +35,6 @@ jobs:
           REDIRECT_URIS: ${{ secrets.REDIRECT_URIS }}
           TOKEN_URI: ${{ secrets.TOKEN_URI }}
           PROJECT_ID: ${{ secrets.PROJECT_ID }}
+          FIRESTORE_DATABASE: ${{ secrets.FIRESTORE_DATABASE }}
         run: |
           python backend/pipelines/run_all_users.py

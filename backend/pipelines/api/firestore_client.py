@@ -14,5 +14,5 @@ class FirestoreClient:
         })
 
     def get_all_users(self):
-        users=self.db.collection(self.collection_name).where('active','--',True).stream()
+        users=self.db.collection(self.collection_name).where('active','==',True).stream()
         return [(user.id,user.to_dict()['refresh_token']) for user in users]

@@ -3,16 +3,22 @@ from google.cloud import firestore
 class FirestoreClient:
     def __init__(self,project_id,database_id):
         self.db=firestore.Client(project=project_id,database=database_id)
-        self.collection_name='users'
-    
-    def add_users(self,user_id,refresh_token):
-        doc_ref=self.db.collection(self.collection_name).document(user_id)
-        doc_ref.set({
-            'refresh_token':refresh_token,
-            'last_active':firestore.SERVER_TIMESTAMP,
-            'active':True
-        })
 
-    def get_all_users(self):
-        users=self.db.collection(self.collection_name).where('active','==',True).stream()
-        return [(user.id,user.to_dict()['refresh_token']) for user in users]
+    def get_session_users(self,session_id):
+        doc=self.db.collection('sessions').document(session_id).get()
+        if not doc.exists:
+            return RuntimeError(f'Session {session_id} does not exist...')
+        
+        data = doc.to_dict()
+        users = data.get("users", [])
+
+        return [
+            (u["user_id"], u["refresh_token"])
+            for u in users
+            if u.get("isactive", True)
+        ]
+    
+    def update_session_status(self, session_id, status):
+        self.db.collection("sessions").document(session_id).update({
+            "status": status
+        })

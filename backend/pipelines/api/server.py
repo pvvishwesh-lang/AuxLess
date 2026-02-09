@@ -4,7 +4,7 @@ from backend.pipelines.run_all_users import run_for_session
 
 app = Flask(__name__)
 
-@app.route("/run_pipeline", methods=["POST"])
+@app.route("/run_pipeline", methods=["POST",'GET'])
 def run_pipeline():
     session_id = request.args.get("session_id")
     if not session_id:

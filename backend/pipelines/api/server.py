@@ -1,17 +1,17 @@
+# server.py
 from flask import Flask, request, jsonify
-from backend.pipelines.run_all_users import main as run_all_users
+from backend.pipelines.run_all_users import run_for_session
 
 app = Flask(__name__)
 
-@app.route("/run_pipeline", methods=["POST","GET"])
+@app.route("/run_pipeline", methods=["POST"])
 def run_pipeline():
+    session_id = request.args.get("session_id")
+    if not session_id:
+        return jsonify({"error": "session_id required"}), 400
+
     try:
-        run_all_users()
-        return jsonify({"status": "success"}), 200
+        run_for_session(session_id)
+        return jsonify({"status": "started", "session_id": session_id}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-
-if __name__ == "__main__":
-    import os
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)

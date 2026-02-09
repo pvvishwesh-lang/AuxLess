@@ -10,7 +10,7 @@ from apache_beam.runners.dataflow import DataflowRunner
 import os
 
 
-def run_pipeline_for_user(user_id,refresh_token,gcs_prefix):
+def run_pipeline_for_user(user_id,refresh_token,gcs_prefix,session_id):
     auth = GoogleAuthClient(
         token_uri=os.environ["TOKEN_URI"],
         client_id=os.environ["CLIENT_ID"],
@@ -21,8 +21,6 @@ def run_pipeline_for_user(user_id,refresh_token,gcs_prefix):
     access_token=auth.get_access_token()
     yt_client=YoutubeClient(access_token)
     columns=['playlist_name', 'track_title', 'artist_name', 'video_id', 'genre','country','collection_name','collection_id','trackTimeMillis', 'view_count','like_count','comment_count']
-
-
     options = PipelineOptions(["--setup_file=./setup.py"])
     google_cloud_options = options.view_as(GoogleCloudOptions)
     google_cloud_options.project = os.environ['PROJECT_ID']
@@ -39,7 +37,7 @@ def run_pipeline_for_user(user_id,refresh_token,gcs_prefix):
             |'Seed'>>beam.Create([None])
             |'Read From API'>>beam.ParDo(ReadFromAPI(access_token))
             |'ToCSV' >> beam.Map(lambda r: dict_to_csv_line(r, columns))
-            |'WriteToGCS'>> WriteToText(file_path_prefix=f'gs://youtube-pipeline-staging-bucket/{gcs_prefix}{user_id}',file_name_suffix='.csv',shard_name_template='',header=','.join(columns))
+            |'WriteToGCS'>> WriteToText(file_path_prefix=f'gs://youtube-pipeline-staging-bucket/{gcs_prefix}/{session_id}/{user_id}',file_name_suffix='.csv',shard_name_template='',header=','.join(columns))
     )
     result=p.run()
     result.wait_until_finish()

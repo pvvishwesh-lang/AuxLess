@@ -37,7 +37,7 @@ def run_pipeline_for_user(user_id,refresh_token,gcs_prefix,session_id):
             |'Seed'>>beam.Create([None])
             |'Read From API'>>beam.ParDo(ReadFromAPI(access_token))
             |'ToCSV' >> beam.Map(lambda r: dict_to_csv_line(r, columns))
-            |'WriteToGCS'>> WriteToText(file_path_prefix=f'gs://youtube-pipeline-staging-bucket/{gcs_prefix}/{session_id}/{user_id}',file_name_suffix='.csv',shard_name_template='',header=','.join(columns))
+            |'WriteToGCS'>> WriteToText(file_path_prefix=f'gs://youtube-pipeline-staging-bucket/{gcs_prefix}{user_id}',file_name_suffix='.csv',shard_name_template='',header=','.join(columns))
     )
     result=p.run()
     result.wait_until_finish()

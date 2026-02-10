@@ -1,2 +1,5 @@
+functions-framework==3.*
 requests
 google-cloud-firestore
+google-cloud-functions
+google-events

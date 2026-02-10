@@ -8,6 +8,19 @@ from backend.pipelines.api.csv_writer import dict_to_csv_line
 from apache_beam.runners.runner import PipelineState
 from apache_beam.runners.dataflow import DataflowRunner
 import os
+import re
+
+
+def sanitize_for_job_name(s: str) -> str:
+    s = s.lower() 
+    s = re.sub(r'[^a-z0-9-]', '-', s) 
+    s = re.sub(r'-+', '-', s)
+    s = s.strip('-')
+    if not s[0].isalpha():
+        s = 'a' + s
+    if not s[-1].isalnum():
+        s = s + '1'
+    return s
 
 
 def run_pipeline_for_user(user_id,refresh_token,gcs_prefix,session_id):
@@ -24,7 +37,7 @@ def run_pipeline_for_user(user_id,refresh_token,gcs_prefix,session_id):
     options = PipelineOptions(["--setup_file=./setup.py"])
     google_cloud_options = options.view_as(GoogleCloudOptions)
     google_cloud_options.project = os.environ['PROJECT_ID']
-    google_cloud_options.job_name = f"youtube-pipeline{user_id.lower()}"
+    google_cloud_options.job_name = f"youtube-pipeline-{sanitize_for_job_name(user_id)}"
     google_cloud_options.region='us-central1'
     google_cloud_options.staging_location = "gs://youtube-pipeline-staging-bucket/staging"
     google_cloud_options.temp_location = "gs://youtube-pipeline-staging-bucket/temp"

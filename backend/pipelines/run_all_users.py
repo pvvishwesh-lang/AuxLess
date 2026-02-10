@@ -39,7 +39,7 @@ def run_for_session(session_id):
     prefix = f"user_outputs/{session_id}/"
 
     for user_id, refresh_token in users:
-        run_pipeline_for_user(user_id, refresh_token, prefix)
+        run_pipeline_for_user(user_id, refresh_token, prefix,session_id)
 
     combine_gcs_files(
         bucket,

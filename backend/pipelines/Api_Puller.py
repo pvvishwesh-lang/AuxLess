@@ -38,7 +38,7 @@ def run_pipeline_for_user(user_id,refresh_token,gcs_prefix,session_id):
     options = PipelineOptions(["--setup_file=./setup.py"])
     google_cloud_options = options.view_as(GoogleCloudOptions)
     google_cloud_options.project = os.environ['PROJECT_ID']
-    google_cloud_options.job_name = f"youtube-pipeline-{session_id}-{sanitize_for_job_name(user_id)}-{datetime.now().timestamp()}"
+    google_cloud_options.job_name = f"youtube-pipeline-{session_id}-{sanitize_for_job_name(user_id)}-{int(datetime.now().timestamp())}"
     google_cloud_options.region='us-central1'
     google_cloud_options.staging_location = "gs://youtube-pipeline-staging-bucket/staging"
     google_cloud_options.temp_location = "gs://youtube-pipeline-staging-bucket/temp"

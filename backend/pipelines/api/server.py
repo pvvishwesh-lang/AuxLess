@@ -15,3 +15,7 @@ def run_pipeline():
         return jsonify({"status": "started", "session_id": session_id}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8080, debug=True)

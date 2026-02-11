@@ -29,6 +29,15 @@ def combine_gcs_files(bucket_name, input_prefix, output_file):
         bucket.blob(output_file).upload_from_string(out)
         print(f"Combined {len(blobs)} files into {output_file}")
 
+def cleanup_intermediate_files(bucket_name, prefix):
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blobs = bucket.list_blobs(prefix=prefix)
+    for blob in blobs:
+        if prefix in blob.name:
+            blob.delete()
+    print(f"Cleaned up intermediate files in {prefix}")
+
 def run_for_session(session_id):
     project_id = os.environ["PROJECT_ID"]
     database_id = os.environ["FIRESTORE_DATABASE"]
@@ -40,10 +49,17 @@ def run_for_session(session_id):
         raise RuntimeError("No active users in session")
 
     fs.update_session_status(session_id, "running")
+
+    def safe_run(u_id,r_token,pfx,s_id):
+        try:
+            run_pipeline_for_user(u_id,r_token,pfx,s_id)
+        except Exception as e:
+            print(f'Failed: Pipelein for user {u_id} in session {s_id}: {e}')
+    
     threads=[]
     for user_id,refresh_token in users:
         t=threading.Thread(
-            target=run_pipeline_for_user,
+            target=safe_run,
             args=(user_id, refresh_token, prefix,session_id)
         )
         t.start()
@@ -53,10 +69,10 @@ def run_for_session(session_id):
     time.sleep(10)
     bucket = "youtube-pipeline-staging-bucket"
     prefix = f"user_outputs/{session_id}/"
-    combine_gcs_files(
-        bucket,
-        prefix,
-        f"Final_Output/{session_id}_combined.csv"
-    )
-
-    fs.update_session_status(session_id, "done")
+    try:
+        combine_gcs_files(bucket,prefix,f"Final_Output/{session_id}_combined.csv")
+        cleanup_intermediate_files(bucket, prefix)
+        fs.update_session_status(session_id, "done")
+    except Exception as e:
+        print(f'Combination failed for {session_id}:{e}')
+        fs.update_session_status(session_id, "error")

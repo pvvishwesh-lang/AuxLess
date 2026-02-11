@@ -40,6 +40,8 @@ def cleanup_intermediate_files(bucket_name, prefix):
     print(f"Cleaned up intermediate files in {prefix}")
 
 def run_for_session(session_id):
+    bucket = "youtube-pipeline-staging-bucket"
+    prefix = f"user_outputs/{session_id}/"
     project_id = os.environ["PROJECT_ID"]
     database_id = os.environ["FIRESTORE_DATABASE"]
 
@@ -68,8 +70,6 @@ def run_for_session(session_id):
     for t in threads:
         t.join()
     time.sleep(10)
-    bucket = "youtube-pipeline-staging-bucket"
-    prefix = f"user_outputs/{session_id}/"
     try:
         combine_gcs_files(bucket,prefix,f"Final_Output/{session_id}_combined.csv")
         cleanup_intermediate_files(bucket, prefix)

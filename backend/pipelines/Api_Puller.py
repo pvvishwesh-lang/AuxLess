@@ -10,6 +10,7 @@ from apache_beam.runners.dataflow import DataflowRunner
 import os
 import re
 from datetime import datetime
+import uuid
 
 
 def sanitize_for_job_name(s: str) -> str:
@@ -32,13 +33,14 @@ def run_pipeline_for_user(user_id,refresh_token,gcs_prefix,session_id):
         redirect_uri=os.environ["REDIRECT_URIS"],
         refresh_token=refresh_token
     )
+    unique_id=str(uuid.uuid4())[:4]
     access_token=auth.get_access_token()
     yt_client=YoutubeClient(access_token)
     columns=['playlist_name', 'track_title', 'artist_name', 'video_id', 'genre','country','collection_name','collection_id','trackTimeMillis', 'view_count','like_count','comment_count']
     options = PipelineOptions(["--setup_file=./setup.py"])
     google_cloud_options = options.view_as(GoogleCloudOptions)
     google_cloud_options.project = os.environ['PROJECT_ID']
-    google_cloud_options.job_name = f"youtube-pipeline-{session_id}-{sanitize_for_job_name(user_id)}-{int(datetime.now().timestamp())}"
+    google_cloud_options.job_name = f"youtube-pipeline-{session_id[:10]}-{sanitize_for_job_name(user_id)[:10]}-{unique_id}"
     google_cloud_options.region='us-central1'
     google_cloud_options.staging_location = "gs://youtube-pipeline-staging-bucket/staging"
     google_cloud_options.temp_location = "gs://youtube-pipeline-staging-bucket/temp"

@@ -56,4 +56,3 @@ def run_pipeline_for_user(user_id,refresh_token,gcs_prefix,session_id):
             |'WriteToGCS'>> WriteToText(file_path_prefix=f'gs://youtube-pipeline-staging-bucket/{gcs_prefix}{user_id}',file_name_suffix='.csv',shard_name_template='',header=','.join(columns))
     )
     result=p.run()
-    result.wait_until_finish()

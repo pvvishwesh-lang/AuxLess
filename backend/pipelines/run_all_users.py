@@ -4,6 +4,7 @@ from backend.pipelines.api.firestore_client import FirestoreClient
 from backend.pipelines.Api_Puller import run_pipeline_for_user
 from google.cloud import storage
 import time
+import threading
 
 def combine_gcs_files(bucket_name, input_prefix, output_file):
     time.sleep(5)

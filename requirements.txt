@@ -1,4 +1,4 @@
-apache-beam[gcp]==2.53.0
+apache-beam[gcp]==2.71.0
 google-auth
 google-auth-oauthlib
 google-auth-httplib2

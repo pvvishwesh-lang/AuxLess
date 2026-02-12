@@ -10,9 +10,6 @@ def run_pipeline():
     session_id = request.args.get("session_id")
     if not session_id:
         return jsonify({"error": "session_id required"}), 400
-        
-    thread = threading.Thread(target=run_for_session, args=(session_id,))
-    thread.start()
     
     return jsonify({"status": "accepted", "session_id": session_id}), 202
 

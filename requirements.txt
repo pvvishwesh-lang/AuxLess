@@ -8,3 +8,4 @@ google-cloud-firestore
 requests
 pandas
 flask
+gunicorn

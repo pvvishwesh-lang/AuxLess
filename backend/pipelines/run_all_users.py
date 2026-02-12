@@ -51,7 +51,10 @@ def run_for_session(session_id):
     if not users:
         raise RuntimeError("No active users in session")
 
-    fs.update_session_status(session_id, "running")
+    status=fs.get_session_status(session_id)
+    if status not in ['running']:
+        print(f"Session {session_id} already processed or not in triggered state. Skipping.")
+        return
 
     def safe_run(u_id,r_token,pfx,s_id):
         try:

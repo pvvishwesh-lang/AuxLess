@@ -7,3 +7,4 @@ google-cloud-storage
 google-cloud-firestore
 requests
 pandas
+flask

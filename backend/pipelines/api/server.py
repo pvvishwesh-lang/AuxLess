@@ -6,7 +6,7 @@ import threading
 
 app = Flask(__name__)
 
-@app.route("/", methods=["POST"])
+@app.route("/", methods=["POST",'GET'])
 def pubsub_worker():
     envelope = request.get_json()
     if not envelope:

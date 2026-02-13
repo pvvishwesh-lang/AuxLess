@@ -6,7 +6,11 @@ import threading
 
 app = Flask(__name__)
 
-@app.route("/", methods=["POST",'GET'])
+@app.route("/", methods=["GET"])
+def health():
+    return "OK", 200
+
+@app.route("/", methods=["POST"])
 def pubsub_worker():
     envelope = request.get_json()
     if not envelope:

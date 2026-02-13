@@ -62,17 +62,8 @@ def run_for_session(session_id):
         except Exception as e:
             print(f'Failed: Pipelein for user {u_id} in session {s_id}: {e}')
     
-    threads=[]
-    for user_id,refresh_token in users:
-        t=threading.Thread(
-            target=safe_run,
-            args=(user_id, refresh_token, prefix,session_id)
-        )
-        t.start()
-        threads.append(t)
-    for t in threads:
-        t.join()
-    time.sleep(10)
+    for user_id, refresh_token in users:
+        safe_run(user_id, refresh_token, prefix, session_id)
     try:
         combine_gcs_files(bucket,prefix,f"Final_Output/{session_id}_combined.csv")
         cleanup_intermediate_files(bucket, prefix)

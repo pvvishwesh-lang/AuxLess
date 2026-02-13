@@ -1,10 +1,10 @@
-# run_all_users.py
 import os
 from backend.pipelines.api.firestore_client import FirestoreClient
 from backend.pipelines.Api_Puller import run_pipeline_for_user
 from google.cloud import storage
 import time
 import threading
+import subprocess
 
 def combine_gcs_files(bucket_name, input_prefix, output_file):
     time.sleep(5)
@@ -29,6 +29,7 @@ def combine_gcs_files(bucket_name, input_prefix, output_file):
         out = header+"\n"+'\n'.join(combined_lines)
         bucket.blob(output_file).upload_from_string(out)
         print(f"Combined {len(blobs)} files into {output_file}")
+        
 
 def cleanup_intermediate_files(bucket_name, prefix):
     client = storage.Client()
@@ -71,3 +72,14 @@ def run_for_session(session_id):
     except Exception as e:
         print(f'Combination failed for {session_id}:{e}')
         fs.update_session_status(session_id, "error")
+     '''   
+     try:
+        subprocess.Popen(
+            ["python", "backend/pipelines/api/stream_feedback_pipeline.py"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        print("Streaming feedback pipeline started in background.")
+    except Exception as e:
+        print(f"Failed to start streaming pipeline: {e}")
+    '''

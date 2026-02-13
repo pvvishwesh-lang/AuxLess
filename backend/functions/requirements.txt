@@ -3,3 +3,4 @@ requests
 google-cloud-firestore
 google-cloud-functions
 google-events
+google-cloud-pubsub

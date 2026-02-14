@@ -21,6 +21,11 @@ def mock_auth(monkeypatch):
 
     monkeypatch.setattr("backend.pipelines.api.auth.GoogleAuthClient",lambda *a, **k: FakeAuth())
 
+
+class FakeWriteToText:
+    def expand(self, pcoll):
+        return pcoll
+
 def test_pipeline_for_multiple_users(monkeypatch):
   class FakeDoFn:
     def process(self,element):
@@ -32,7 +37,7 @@ def test_pipeline_for_multiple_users(monkeypatch):
                     'like_count':i*2,'comment_count':i*3
                 }
   monkeypatch.setattr("backend.pipelines.api.ReadFromAPI.ReadFromAPI", lambda token: FakeDoFn())
-  monkeypatch.setattr("apache_beam.io.textio.WriteToText", lambda *a, **kw: beam.Map(lambda x: x))
+  monkeypatch.setattr("apache_beam.io.textio.WriteToText", lambda *a, **kw:FakeWriteToText() )
   fake_response = MagicMock()
   fake_response.json.return_value = {"access_token": "fake_access_token"}
   with patch("backend.pipelines.api.auth.requests.post", return_value=fake_response):

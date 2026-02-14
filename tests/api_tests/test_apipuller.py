@@ -12,7 +12,13 @@ os.environ["REDIRECT_URIS"]="test"
 
 @pytest.fixture(autouse=True)
 def mock_auth(monkeypatch):
-    monkeypatch.setattr("backend.pipelines.Api_Puller.GoogleAuthClient.get_access_token",lambda: "fake_access_token")
+    class FakeAuth:
+        def __init__(self, *args, **kwargs):
+            pass
+        def get_access_token(self):
+            return "fake_access_token"
+
+    monkeypatch.setattr("backend.pipelines.api.auth.GoogleAuthClient",lambda *a, **k: FakeAuth())
 
 def test_pipeline_for_multiple_users(monkeypatch):
   class FakeDoFn:

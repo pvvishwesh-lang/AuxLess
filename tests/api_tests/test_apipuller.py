@@ -1,12 +1,23 @@
 from backend.pipelines.Api_Puller import run_pipeline_for_user
 import apache_beam as beam
 import os
+from backend.pipelines.api.auth import GoogleAuthClient
 
 os.environ["TOKEN_URI"]="test"
 os.environ["CLIENT_ID"]="test"
 os.environ["CLIENT_SECRET"]="test"
 os.environ["REFRESH_TOKEN_URI"]="test"
 os.environ["REDIRECT_URIS"]="test"
+
+@pytest.fixture(autouse=True)
+def mock_auth(monkeypatch):
+    class FakeAuth:
+        def __init__(self, *args, **kwargs):
+            pass
+        def get_access_token(self):
+            return "fake_access_token"
+
+    monkeypatch.setattr("backend.pipelines.api.auth.GoogleAuthClient",lambda *a, **k: FakeAuth())
 
 def test_pipeline_for_multiple_users(monkeypatch):
   class FakeDoFn:

@@ -3,6 +3,7 @@ import apache_beam as beam
 import os
 from backend.pipelines.api.auth import GoogleAuthClient
 import pytest
+from unittest.mock import patch, MagicMock
 
 os.environ["TOKEN_URI"]="test"
 os.environ["CLIENT_ID"]="test"
@@ -32,4 +33,7 @@ def test_pipeline_for_multiple_users(monkeypatch):
                 }
   monkeypatch.setattr("backend.pipelines.api.ReadFromAPI.ReadFromAPI", lambda token: FakeDoFn())
   monkeypatch.setattr("apache_beam.io.textio.WriteToText", lambda *a, **kw: beam.Map(lambda x: x))
-  run_pipeline_for_user("user1","fake_token","prefix/","sess1")
+  fake_response = MagicMock()
+  fake_response.json.return_value = {"access_token": "fake_access_token"}
+  with patch("backend.pipelines.api.auth.requests.post", return_value=fake_response):
+      run_pipeline_for_user("user1", "fake_token", "prefix/", "sess1")

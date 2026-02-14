@@ -20,4 +20,6 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-mock
       - name: Run tests
-        run: pytest -v tests/api_tests
+        run: |
+          export PYTHONPATH=$PYTHONPATH:.
+          pytest -v tests/api_tests

@@ -5,6 +5,13 @@ and gcs client using Monkeypatch and pytest
 import pytest
 from unittest.mock import MagicMock
 
+@pytest.fixture(autouse=True)
+def set_test_env(monkeypatch):
+    monkeypatch.setenv("PROJECT_ID", "test-project")
+    monkeypatch.setenv("DATASET_ID", "test_dataset")
+    monkeypatch.setenv("REDIRECT_URIS", "http://localhost")
+    monkeypatch.setenv("TOKEN_URI", "https://example.com/token")
+
 '''
 Test for youtube client
 '''

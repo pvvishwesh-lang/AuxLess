@@ -2,6 +2,7 @@ from backend.pipelines.Api_Puller import run_pipeline_for_user
 import apache_beam as beam
 import os
 from backend.pipelines.api.auth import GoogleAuthClient
+import pytest
 
 os.environ["TOKEN_URI"]="test"
 os.environ["CLIENT_ID"]="test"

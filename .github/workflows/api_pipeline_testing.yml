@@ -1,41 +1,23 @@
-name: YouTube Beam Pipeline
+name: Pipeline Tests
 
 on:
   push:
-    branches: 
-      - main
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v3
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
-          pip install requests pynacl flask apache-beam[gcp] google-auth google-cloud-firestore google-cloud-storage
-
-      - name: Authenticate with GCP
-        uses: google-github-actions/auth@v1
-        with:
-            project_id: ${{ secrets.PROJECT_ID }}
-            credentials_json: ${{ secrets.GCP_SECRET_KEY }}
-
-      - name: Build and push Docker image
-        run: |
-          gcloud builds submit --tag gcr.io/${{ secrets.PROJECT_ID }} /youtube-backend
-
-      - name: Deploy to Cloud Run
-        run: |
-          gcloud run deploy youtube-backend\
-            --image gcr.io/${{ secrets.PROJECT_ID }}/youtube-backend \
-            --region us-central1\
-            --platform managed\
-            --allow-unauthenticated
+          pip install -r requirements.txt
+          pip install pytest pytest-mock
+      - name: Run tests
+        run: pytest -v tests/api_tests

@@ -12,7 +12,6 @@ import re
 from datetime import datetime
 import uuid
 
-
 def sanitize_for_job_name(s: str) -> str:
     s = s.lower() 
     s = re.sub(r'[^a-z0-9-]', '-', s) 

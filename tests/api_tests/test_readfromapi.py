@@ -18,11 +18,11 @@ def test_process_empty_playlists(monkeypatch,mock_itunes_client):
   class EmptyYoutubeClient:
     def get_playlists(self):
       return []
-    api=ReadFromAPI(access_token='fake')
-    api.youtube=EmptyYoutubeClient()
-    api.itunes=mock_itunes_client
-    records=list(api.process(None))
-    assert records==[]
+  api=ReadFromAPI(access_token='fake')
+  api.youtube=EmptyYoutubeClient()
+  api.itunes=mock_itunes_client
+  records=list(api.process(None))
+  assert records==[]
     
 def test_retry_request_success(monkeypatch):
   api=ReadFromAPI(access_token='fake')
@@ -42,7 +42,7 @@ def test_retry_request_failure(monkeypatch):
     raise Exception('Fail')
   with pytest.raises(Exception) as e:
     api._retry_request(always_fail, retries=2, delay=0)
-  assert str(e.value) == "fail"
+  assert str(e.value)=="Fail"
 
 def test_itunes_unknown(monkeypatch):
   class YoutubeClientMock:

@@ -1,9 +1,22 @@
 from backend.pipelines.run_all_users import run_for_session
 import os
+import pytest
 
 os.environ["PROJECT_ID"] = "test-project"
 os.environ["DATASET_ID"] = "test_dataset"
 os.environ["FIRESTORE_DATABASE"] = "test-db"
+
+def test_run_pipeline_happy_path(mocker):
+    class FakeFS:
+        def get_session_users(self, session_id):
+            return [("u1", "t1"), ("u2", "t2")]
+        def get_session_status(self, session_id):
+            return "running"
+        def update_session_status(self, session_id, status):
+            self.status = status
+    mocker.patch("backend.pipelines.run_all_users.FirestoreClient",return_value=FakeFS())
+    mocker.patch("backend.pipelines.run_all_users.run_pipeline_for_user")
+    run_for_session("sess1")
 
 def test_run_for_session_with_no_users(monkeypatch):
   class FakeFS:

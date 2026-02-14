@@ -9,6 +9,7 @@ def test_run_for_session_with_no_users(monkeypatch):
     def update_session_status(self,session_id,status):
       self.status = status
   monkeypatch.setattr("backend.pipelines.run_all_users.FirestoreClient", lambda p,d: FakeFS())
+  monkeypatch.setattr("backend.pipelines.run_all_users.run_pipeline_for_user",lambda *args, **kwargs: None)
   import pytest
   with pytest.raises(RuntimeError):
     run_for_session("sess1")
@@ -22,6 +23,7 @@ def test_run_for_session_skips_if_not_running(monkeypatch):
     def update_session_status(self,session_id,status):
       self.status = status
   monkeypatch.setattr("backend.pipelines.run_all_users.FirestoreClient", lambda p,d: FakeFS())
+  monkeypatch.setattr("backend.pipelines.run_all_users.run_pipeline_for_user",lambda *args, **kwargs: None)
   run_for_session("sess1")
 
   

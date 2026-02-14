@@ -1,5 +1,10 @@
 from backend.pipelines.Api_Puller import run_pipeline_for_user
 import apache_beam as beam
+import os
+os.environ["TOKEN_URI"]="test"
+os.environ["CLIENT_ID"]="test"
+os.environ["CLIENT_SECRET"]="test"
+os.environ["REFRESH_TOKEN_URI"]="test"
 
 def test_pipeline_for_multiple_users(monkeypatch):
   class FakeDoFn:

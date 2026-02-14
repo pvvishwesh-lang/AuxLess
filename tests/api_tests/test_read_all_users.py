@@ -1,4 +1,9 @@
 from backend.pipelines.run_all_users import run_for_session
+import os
+
+os.environ["PROJECT_ID"] = "test-project"
+os.environ["DATASET_ID"] = "test_dataset"
+os.environ["FIRESTORE_DATABASE"] = "test-db"
 
 def test_run_for_session_with_no_users(monkeypatch):
   class FakeFS:

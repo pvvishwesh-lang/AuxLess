@@ -10,8 +10,8 @@ def test_run_for_session_with_no_users(monkeypatch):
       self.status = status
   monkeypatch.setattr("backend.pipelines.api.runallusers.FirestoreClient", lambda p,d: FakeFS())
   import pytest
-    with pytest.raises(RuntimeError):
-        run_for_session("sess1")
+  with pytest.raises(RuntimeError):
+    run_for_session("sess1")
 
 def test_run_for_session_skips_if_not_running(monkeypatch):
   class FakeFS:

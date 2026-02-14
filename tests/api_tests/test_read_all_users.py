@@ -1,10 +1,11 @@
 from backend.pipelines.run_all_users import run_for_session
 import os
 import pytest
-
-os.environ["PROJECT_ID"] = "test-project"
-os.environ["DATASET_ID"] = "test_dataset"
-os.environ["FIRESTORE_DATABASE"] = "test-db"
+@pytest.fixture(autouse=True)
+def set_env_vars():
+    os.environ["PROJECT_ID"] = "test-project"
+    os.environ["DATASET_ID"] = "test_dataset"
+    os.environ["FIRESTORE_DATABASE"] = "test-db"
 
 def test_run_pipeline_happy_path(mocker):
     class FakeFS:
@@ -28,7 +29,6 @@ def test_run_for_session_with_no_users(monkeypatch):
       self.status = status
   monkeypatch.setattr("backend.pipelines.run_all_users.FirestoreClient", lambda p,d: FakeFS())
   monkeypatch.setattr("backend.pipelines.run_all_users.run_pipeline_for_user",lambda *args, **kwargs: None)
-  import pytest
   with pytest.raises(RuntimeError):
     run_for_session("sess1")
 

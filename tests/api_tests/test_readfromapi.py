@@ -41,7 +41,7 @@ def test_retry_request_failure(monkeypatch):
   def always_fail():
     raise Exception('Fail')
   with pytest.raises(Exception) as e:
-    fn._retry_request(always_fail, retries=2, delay=0)
+    api._retry_request(always_fail, retries=2, delay=0)
   assert str(e.value) == "fail"
 
 def test_itunes_unknown(monkeypatch):

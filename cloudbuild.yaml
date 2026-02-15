@@ -1,9 +1,9 @@
 steps:
   - name: gcr.io/cloud-builders/docker
-    args: ["build", "-t", "gcr.io/$PROJECT_ID/auxless-api", "."]
+    args: ["build", "-t", "europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/auxless/auxless-git", "."]
 
   - name: gcr.io/cloud-builders/docker
-    args: ["push", "gcr.io/$PROJECT_ID/auxless-api"]
+    args: ["push", "europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/auxless/auxless-git"]
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud
@@ -13,13 +13,13 @@ steps:
         "deploy",
         "auxless-api",
         "--image",
-        "gcr.io/$PROJECT_ID/auxless-api",
+        "europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/auxless/auxless-git",
         "--region",
-        "us-east1",
+        "europe-west1",
         "--platform",
         "managed",
         "--allow-unauthenticated"
       ]
 
 images:
-  - gcr.io/$PROJECT_ID/auxless-api
+  - europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/auxless/auxless-git

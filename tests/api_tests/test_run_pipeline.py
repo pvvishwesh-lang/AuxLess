@@ -21,6 +21,5 @@ class FakeFS:
 def test_run_pipeline_happy_path(mocker):
     mocker.patch("backend.pipelines.run_all_users.FirestoreClient",return_value=FakeFS())
     mocker.patch("backend.pipelines.run_all_users.run_pipeline_for_user")
-    mocker.patch("backend.pipelines.run_all_users.write_output_to_firestore")
     run_for_session("test_session")
     assert True

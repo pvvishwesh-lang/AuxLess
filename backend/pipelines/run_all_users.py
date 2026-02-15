@@ -30,7 +30,6 @@ def combine_gcs_files(bucket_name, input_prefix, output_file):
         bucket.blob(output_file).upload_from_string(out)
         print(f"Combined {len(blobs)} files into {output_file}")
         
-
 def cleanup_intermediate_files(bucket_name, prefix):
     client = storage.Client()
     bucket = client.bucket(bucket_name)

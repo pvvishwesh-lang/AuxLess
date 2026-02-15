@@ -29,6 +29,8 @@ class FakePipeline:
         return False
     def __or__(self, other):
         return self
+    def run(self):
+        return self 
 
 class FakeWriteToText:
     def expand(self, pcoll):

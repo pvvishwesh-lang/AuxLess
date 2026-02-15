@@ -22,8 +22,6 @@ class YoutubeClient:
             else:
                 break
         return all_playlists
-    
-
 
     def get_playlist_tracks(self,playlist_id):
         url='https://www.googleapis.com/youtube/v3/playlistItems'

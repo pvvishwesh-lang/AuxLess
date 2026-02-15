@@ -23,7 +23,6 @@ class FirestoreClient:
         if not doc.exists:
             return None
         return doc.to_dict().get("status")
-
     
     def update_session_status(self, session_id, status):
         self.db.collection("sessions").document(session_id).update({

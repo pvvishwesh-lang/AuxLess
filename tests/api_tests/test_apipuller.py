@@ -4,6 +4,7 @@ import os
 from backend.pipelines.api.auth import GoogleAuthClient
 import pytest
 from unittest.mock import patch, MagicMock
+from apache_beam.options.pipeline_options import PipelineOptions
 
 os.environ["TOKEN_URI"]="test"
 os.environ["CLIENT_ID"]="test"
@@ -21,6 +22,13 @@ def mock_auth(monkeypatch):
 
     monkeypatch.setattr("backend.pipelines.api.auth.GoogleAuthClient",lambda *a, **k: FakeAuth())
 
+class FakePipeline:
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc, tb):
+        return False
+    def __or__(self, other):
+        return self
 
 class FakeWriteToText:
     def expand(self, pcoll):
@@ -36,8 +44,12 @@ def test_pipeline_for_multiple_users(monkeypatch):
                     'collection_id':i,'trackTimeMillis':123,'view_count':i,
                     'like_count':i*2,'comment_count':i*3
                 }
+  monkeypatch.setattr("backend.pipelines.Api_Puller.beam.Create",lambda *a, **k: FakePipeline())
+  monkeypatch.setattr("backend.pipelines.Api_Puller.beam.ParDo",lambda *a, **k: FakePipeline())
   monkeypatch.setattr("backend.pipelines.api.ReadFromAPI.ReadFromAPI", lambda token: FakeDoFn())
   monkeypatch.setattr("apache_beam.io.textio.WriteToText", lambda *a, **kw:FakeWriteToText() )
+  monkeypatch.setattr("backend.pipelines.Api_Puller.PipelineOptions",lambda *a, **k: PipelineOptions(["--runner=DirectRunner"]))
+  monkeypatch.setattr("backend.pipelines.Api_Puller.beam.Pipeline",lambda *a, **k: FakePipeline())
   fake_response = MagicMock()
   fake_response.json.return_value = {"access_token": "fake_access_token"}
   with patch("backend.pipelines.api.auth.requests.post", return_value=fake_response):

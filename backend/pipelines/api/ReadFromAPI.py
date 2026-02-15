@@ -6,7 +6,6 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 
-
 class ReadFromAPI(beam.DoFn):
     def __init__(self,access_token):
         self.access_token=access_token

@@ -3,8 +3,12 @@ name: Pipeline Tests
 on:
   push:
     branches: [main]
+    paths:
+      - 'backend/pipelines/**'
   pull_request:
     branches: [main]
+    paths:
+      - 'backend/pipelines/**'
 
 jobs:
   test:

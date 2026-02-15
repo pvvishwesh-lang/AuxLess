@@ -34,6 +34,10 @@ class FakeWriteToText:
     def expand(self, pcoll):
         return pcoll
 
+class FakeTransform:
+    def __rrshift__(self, other):
+        return self
+
 def test_pipeline_for_multiple_users(monkeypatch):
   class FakeDoFn:
     def process(self,element):
@@ -44,10 +48,11 @@ def test_pipeline_for_multiple_users(monkeypatch):
                     'collection_id':i,'trackTimeMillis':123,'view_count':i,
                     'like_count':i*2,'comment_count':i*3
                 }
-  monkeypatch.setattr("backend.pipelines.Api_Puller.beam.Create",lambda *a, **k: FakePipeline())
-  monkeypatch.setattr("backend.pipelines.Api_Puller.beam.ParDo",lambda *a, **k: FakePipeline())
+  monkeypatch.setattr("backend.pipelines.Api_Puller.beam.Create",lambda *a, **k: FakeTransform())
+  monkeypatch.setattr("backend.pipelines.Api_Puller.beam.ParDo",lambda *a, **k: FakeTransform())
+  monkeypatch.setattr("backend.pipelines.Api_Puller.beam.Map", lambda *a, **k: FakeTransform())
   monkeypatch.setattr("backend.pipelines.api.ReadFromAPI.ReadFromAPI", lambda token: FakeDoFn())
-  monkeypatch.setattr("apache_beam.io.textio.WriteToText", lambda *a, **kw:FakeWriteToText() )
+  monkeypatch.setattr("backend.pipelines.Api_Puller.WriteToText",lambda *a, **kw: FakeTransform())  
   monkeypatch.setattr("backend.pipelines.Api_Puller.PipelineOptions",lambda *a, **k: PipelineOptions(["--runner=DirectRunner"]))
   monkeypatch.setattr("backend.pipelines.Api_Puller.beam.Pipeline",lambda *a, **k: FakePipeline())
   fake_response = MagicMock()

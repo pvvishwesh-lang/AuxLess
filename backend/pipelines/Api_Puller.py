@@ -23,7 +23,6 @@ def sanitize_for_job_name(s: str) -> str:
         s = s + '1'
     return s
 
-
 def run_pipeline_for_user(user_id,refresh_token,gcs_prefix,session_id):
     auth = GoogleAuthClient(
         token_uri=os.environ["TOKEN_URI"],

@@ -52,11 +52,26 @@ def run():
     schema = 'room_id:STRING,song_id:STRING,song_name:STRING,artist:STRING,play_count:INTEGER,skip_count:INTEGER,complete_count:INTEGER,completion_rate:FLOAT,total_events:INTEGER'
     
     with beam.Pipeline(options=options) as p:
-        (
+        
+        events = (
             p
             | 'Read' >> beam.io.ReadFromPubSub(topic=PUBSUB_TOPIC)
             | 'Parse' >> beam.ParDo(ParseEvent())
-            | 'Window' >> beam.WindowInto(FixedWindows(60))
+        )
+        
+        raw_storage = (
+            events
+            | 'WindowRaw' >> beam.WindowInto(FixedWindows(60))
+            | 'FormatJSON' >> beam.Map(lambda x: json.dumps(x))
+            | 'WriteGCS' >> beam.io.WriteToText(
+                'gs://auxless-streaming-temp/raw_events/',
+                file_name_suffix='.json'
+            )
+        )
+        
+        analytics = (
+            events
+            | 'WindowAnalytics' >> beam.WindowInto(FixedWindows(60))
             | 'Key' >> beam.Map(lambda x: ((x['room_id'], x['song_id']), x))
             | 'Group' >> beam.GroupByKey()
             | 'Aggregate' >> beam.ParDo(AggregateMetrics())

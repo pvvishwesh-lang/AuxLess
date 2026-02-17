@@ -71,3 +71,12 @@ def run_for_session(session_id):
     except Exception as e:
         print(f'Combination failed for {session_id}:{e}')
         fs.update_session_status(session_id, "error")
+    try:
+        subprocess.Popen(
+            ["python", "backend/pipelines/streaming_music_analytics.py"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        print("Streaming feedback pipeline started in background.")
+    except Exception as e:
+        print(f"Failed to start streaming pipeline: {e}")

@@ -58,12 +58,22 @@ def run_for_session(session_id):
 
     def safe_run(u_id,r_token,pfx,s_id):
         try:
-            run_pipeline_for_user(u_id,r_token,pfx,s_id)
+            return run_pipeline_for_user(u_id,r_token,pfx,s_id)
         except Exception as e:
             print(f'Failed: Pipelein for user {u_id} in session {s_id}: {e}')
-    
+    pipeline_results = []
+    print(f"Starting pipelines for {len(users)} users...")
     for user_id, refresh_token in users:
-        safe_run(user_id, refresh_token, prefix, session_id)
+        result=safe_run(user_id, refresh_token, prefix, session_id)
+        if result:
+            pipeline_results.append(result)
+    if pipeline_results:
+        print(f"Waiting for {len(pipeline_results)} jobs to complete...")
+        for result in pipeline_results:
+            try:
+                result.wait_until_finish()
+            except Exception as e:
+                print(f"Error waiting for pipeline: {e}")
     try:
         combine_gcs_files(bucket,prefix,f"Final_Output/{session_id}_combined.csv")
         cleanup_intermediate_files(bucket, prefix)

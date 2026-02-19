@@ -3,9 +3,15 @@ from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.transforms.window import FixedWindows
 import json
 import logging
+import os
 
-PROJECT_ID = "auxless-streaming"
-PUBSUB_TOPIC = f"projects/{PROJECT_ID}/topics/auxless_pubsub_topic"
+PROJECT_ID = os.environ["GCP_PROJECT_ID"]
+PUBSUB_TOPIC = os.environ["PUBSUB_TOPIC"]
+GCP_REGION = os.environ["GCP_REGION"]
+GCS_TEMP_LOCATION = os.environ["GCS_TEMP_LOCATION"]
+GCS_STAGING_LOCATION = os.environ["GCS_STAGING_LOCATION"]
+GCS_RAW_EVENTS_PATH = os.environ["GCS_RAW_EVENTS_PATH"]
+BQ_TABLE = os.environ["BQ_TABLE"]
 
 class ParseEvent(beam.DoFn):
     def process(self, element):
@@ -44,9 +50,9 @@ def run():
     options = PipelineOptions(
         streaming=True,
         project=PROJECT_ID,
-        region='us-central1',
-        temp_location='gs://auxless-streaming-temp/temp',
-        staging_location='gs://auxless-streaming-temp/staging'
+        region=GCP_REGION,
+        temp_location=GCS_TEMP_LOCATION,
+        staging_location=GCS_STAGING_LOCATION
     )
     
     schema = 'room_id:STRING,song_id:STRING,song_name:STRING,artist:STRING,play_count:INTEGER,skip_count:INTEGER,complete_count:INTEGER,completion_rate:FLOAT,total_events:INTEGER'
@@ -64,7 +70,7 @@ def run():
             | 'WindowRaw' >> beam.WindowInto(FixedWindows(60))
             | 'FormatJSON' >> beam.Map(lambda x: json.dumps(x))
             | 'WriteGCS' >> beam.io.WriteToText(
-                'gs://auxless-streaming-temp/raw_events/',
+                GCS_RAW_EVENTS_PATH,
                 file_name_suffix='.json'
             )
         )
@@ -76,7 +82,7 @@ def run():
             | 'Group' >> beam.GroupByKey()
             | 'Aggregate' >> beam.ParDo(AggregateMetrics())
             | 'WriteBQ' >> beam.io.WriteToBigQuery(
-                f'{PROJECT_ID}:auxless.song_analytics',
+                BQ_TABLE,
                 schema=schema,
                 create_disposition=beam.io.BigQueryDisposition.CREATE_IF_NEEDED,
                 write_disposition=beam.io.BigQueryDisposition.WRITE_APPEND

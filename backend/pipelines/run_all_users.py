@@ -55,29 +55,17 @@ def run_for_session(session_id):
     if status not in ['running']:
         print(f"Session {session_id} already processed or not in triggered state. Skipping.")
         return
-
-    def safe_run(u_id,r_token,pfx,s_id):
-        try:
-            return run_pipeline_for_user(u_id,r_token,pfx,s_id)
-        except Exception as e:
-            print(f'Failed: Pipelein for user {u_id} in session {s_id}: {e}')
-    pipeline_results = []
+    print(f"Users: {users}")
     print(f"Starting pipelines for {len(users)} users...")
+    submitted=0
+
     for user_id, refresh_token in users:
-        result=safe_run(user_id, refresh_token, prefix, session_id)
-        if result:
-            pipeline_results.append(result)
-    if pipeline_results:
-        print(f"Waiting for {len(pipeline_results)} jobs to complete...")
-        for result in pipeline_results:
-            try:
-                result.wait_until_finish()
-            except Exception as e:
-                print(f"Error waiting for pipeline: {e}")
-    try:
-        combine_gcs_files(bucket,prefix,f"Final_Output/{session_id}_combined.csv")
-        cleanup_intermediate_files(bucket, prefix)
-        fs.update_session_status(session_id, "done")
-    except Exception as e:
-        print(f'Combination failed for {session_id}:{e}')
-        fs.update_session_status(session_id, "error")
+        try:
+            print(f"Submitting Dataflow job for user: {user_id}")
+            run_pipeline_for_user(user_id, refresh_token, prefix, session_id)
+            submitted+=1
+        except Exception as e:
+            print(f"Failed pipeline for user {user_id}: {e}")
+    print(f"Submitted {submitted} Dataflow jobs.")
+    fs.update_session_status(session_id, "processing")
+    

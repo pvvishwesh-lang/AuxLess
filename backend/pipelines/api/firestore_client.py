@@ -15,7 +15,7 @@ class FirestoreClient:
         return [
             (u["user_id"], u["refresh_token"])
             for u in users
-            if u.get("isactive", True)
+            if u.get("isactive", True) and u.get("user_id") and u.get("refresh_token")
         ]
 
     def get_session_status(self, session_id):

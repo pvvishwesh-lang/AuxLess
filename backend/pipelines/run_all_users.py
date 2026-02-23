@@ -3,8 +3,6 @@ from backend.pipelines.api.firestore_client import FirestoreClient
 from backend.pipelines.Api_Puller import run_pipeline_for_user
 from google.cloud import storage
 import time
-import threading
-import subprocess
 
 def combine_gcs_files(bucket_name, input_prefix, output_file):
     time.sleep(5)
@@ -40,7 +38,7 @@ def cleanup_intermediate_files(bucket_name, prefix):
     print(f"Cleaned up intermediate files in {prefix}")
 
 def run_for_session(session_id):
-    bucket = "youtube-pipeline-staging-bucket"
+    bucket = os.environ['BUCKET']
     prefix = f"user_outputs/{session_id}/"
     project_id = os.environ["PROJECT_ID"]
     database_id = os.environ["FIRESTORE_DATABASE"]
@@ -57,15 +55,32 @@ def run_for_session(session_id):
         return
     print(f"Users: {users}")
     print(f"Starting pipelines for {len(users)} users...")
-    submitted=0
-
+    jobs=[]
     for user_id, refresh_token in users:
         try:
             print(f"Submitting Dataflow job for user: {user_id}")
-            run_pipeline_for_user(user_id, refresh_token, prefix, session_id)
-            submitted+=1
+            job=run_pipeline_for_user(user_id, refresh_token, prefix, session_id)
+            if job:
+                jobs.append(job)
         except Exception as e:
             print(f"Failed pipeline for user {user_id}: {e}")
-    print(f"Submitted {submitted} Dataflow jobs.")
-    fs.update_session_status(session_id, "processing")
+    if not jobs:
+        print("No jobs submitted successfully. Marking session as error.")
+        fs.update_session_status(session_id,'error')
+        return
+    print(f'Waiting for {len(jobs)} jobs to complete...')
+    for job in jobs:
+        try:
+            job.wait_until_finish()
+        except Exception as e:
+            print(f'Error waiting for job: {e}')
+    try:
+        combine_gcs_files(bucket, prefix, f"Final_Output/{session_id}_combined.csv")
+        cleanup_intermediate_files(bucket, prefix)
+        fs.update_session_status(session_id, "done")
+        print(f"Session {session_id} completed successfully.")
+    except Exception as e:
+        print(f"Final combination/cleanup failed: {e}")
+        fs.update_session_status(session_id, "error")
+        
     

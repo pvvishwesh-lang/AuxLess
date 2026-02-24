@@ -12,6 +12,8 @@ import re
 from datetime import datetime
 import uuid
 import json
+from backend.pipelines.api.ReadFromAPI import ReadFromAPI
+
 
 def sanitize_for_job_name(s: str) -> str:
     s = s.lower() 
@@ -50,7 +52,8 @@ def run_pipeline_for_user(user_id,refresh_token,gcs_prefix,session_id):
     validated = (
         p
         | 'Seed' >> beam.Create([None])
-        | 'Read From API' >> beam.ParDo(ValidatingDoFn(access_token,session_id=session_id,user_id=user_id)).with_outputs("invalid_records", main="valid")
+        | 'Read From API' >> beam.ParDo(ReadFromAPI(access_token))
+        | 'Validate records' >> beam.ParDo(ValidatingDoFn(access_token,session_id=session_id,user_id=user_id)).with_outputs("invalid_records", main="valid")
     )
     valid_records = validated.valid
     invalid_records = validated.invalid_records

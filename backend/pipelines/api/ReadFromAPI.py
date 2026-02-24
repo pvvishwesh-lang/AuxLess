@@ -3,6 +3,8 @@ from time import sleep
 from backend.pipelines.api.youtube_client import YoutubeClient
 from backend.pipelines.api.itunes_client import ItunesClient
 import logging
+from backend.pipelines.api.beam_extensions import ValidatingDoFn
+from backend.pipelines.api.structured_logger import get_logger
 
 logging.basicConfig(level=logging.INFO)
 

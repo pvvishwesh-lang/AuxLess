@@ -1,8 +1,9 @@
 def derive_fields(record):
     raw_millis = record.get('trackTimeMillis', 0)
     try:
-        track_millis = int(raw_millis)
+        track_millis = int(float(raw_millis))
     except (TypeError, ValueError):
+        logging.warning(f"Invalid trackTimeMillis: {raw_millis}, defaulting to 0")
         track_millis = 0
     record['trackTimeMillis'] = track_millis
     record['trackTimeSeconds'] = track_millis // 1000

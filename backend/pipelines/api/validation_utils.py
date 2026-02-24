@@ -1,5 +1,7 @@
 def derive_fields(record):
     raw_millis = record.get('trackTimeMillis', 0)
+    if raw_millis in (None, ''):
+        track_millis = 0
     try:
         track_millis = int(float(raw_millis))
     except (TypeError, ValueError):

@@ -5,30 +5,6 @@ from google.cloud import storage
 import time
 from backend.pipelines.api.gcs_utils import combine_gcs_files_safe
 from backend.pipelines.api.bias_utils import compute_bias_metrics
-
-def combine_gcs_files(bucket_name, input_prefix, output_file):
-    time.sleep(5)
-    client = storage.Client()
-    bucket = client.bucket(bucket_name)
-    blobs = list(bucket.list_blobs(prefix=input_prefix))
-    print(f"Found {len(blobs)} files to combine in {input_prefix}")
-
-    combined_lines = []
-    header=None
-    for blob in blobs:
-        if blob.name.endswith('.csv') and 'Final_Output' not in blob.name:
-            content=blob.download_as_text().splitlines()
-            if not content: 
-                continue
-            if header is None:
-                header = content[0]
-            body = [l for l in content if l != header]
-            combined_lines.extend(body)
-
-    if header and combined_lines:
-        out = header+"\n"+'\n'.join(combined_lines)
-        bucket.blob(output_file).upload_from_string(out)
-        print(f"Combined {len(blobs)} files into {output_file}")
         
 def cleanup_intermediate_files(bucket_name, prefix):
     client = storage.Client()
@@ -78,7 +54,7 @@ def run_for_session(session_id):
             print(f'Error waiting for job: {e}')
     try:
         final_csv_path = f'gs://{bucket}/Final_Output/{session_id}_combined.csv'
-        combine_gcs_files_safe(bucket, prefix, f"Final_Output/{session_id}_combined.csv"))
+        combine_gcs_files_safe(bucket, prefix, f"Final_Output/{session_id}_combined.csv")
         cleanup_intermediate_files(bucket, prefix)
         fs.update_session_status(session_id, "done")
         print(f"Session {session_id} completed successfully.")

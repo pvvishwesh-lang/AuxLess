@@ -1,5 +1,4 @@
 import apache_beam as beam
-from backend.pipelines.api.ReadFromAPI import ReadFromAPI
 from backend.pipelines.api.validation_utils import derive_fields, validate_record
 from backend.pipelines.api.anomaly_detector import detect_anomalies, log_anomalies
 from backend.pipelines.api.structured_logger import get_logger

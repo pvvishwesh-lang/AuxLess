@@ -11,26 +11,32 @@ COLUMNS = [
     'view_count','like_count','comment_count',
     'like_to_view_ratio','comment_to_view_ratio'
 ]
-
 class ValidatingDoFn(beam.DoFn):
     def __init__(self, access_token, session_id, user_id):
         self.access_token = access_token
         self.session_id = session_id
         self.user_id = user_id
         self.logger = get_logger(session_id, user_id)
-        self._api = None
-
-    def setup(self):
-        self._api = ReadFromAPI(self.access_token)
-        if hasattr(self._api, "setup"):
-            self._api.setup()
-
-
     def process(self, element):
-        for record in self._api.process(element):
-            record = derive_fields(record)
-            validate_record(record, COLUMNS)
+        try:
+            record = derive_fields(element)
+            validate_record(record, COLUMNS, self.logger)
             anomalies = detect_anomalies(record)
             if anomalies:
                 log_anomalies(self.logger, record, anomalies)
-            yield record
+            yield record  
+        except Exception as e:
+            self.logger.error(
+                "invalid_record_schema",
+                extra={
+                    "video_id": element.get("video_id"),
+                    "error": str(e),
+                },
+            )
+            yield beam.pvalue.TaggedOutput(
+                "invalid_records",
+                {
+                    "error": str(e),
+                    "record": element,
+                },
+            )

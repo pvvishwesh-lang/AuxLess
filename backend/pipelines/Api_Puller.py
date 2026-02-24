@@ -11,6 +11,7 @@ import os
 import re
 from datetime import datetime
 import uuid
+import json
 
 def sanitize_for_job_name(s: str) -> str:
     s = s.lower() 
@@ -46,11 +47,21 @@ def run_pipeline_for_user(user_id,refresh_token,gcs_prefix,session_id):
     google_cloud_options.service_account_email='serviceaccountforgithub@main-shade-485500-a0.iam.gserviceaccount.com'
     
     p=beam.Pipeline(options=options)
+    validated = (
+        p
+        | 'Seed' >> beam.Create([None])
+        | 'Read From API' >> beam.ParDo(ValidatingDoFn(access_token,session_id=session_id,user_id=user_id)).with_outputs("invalid_records", main="valid")
+    )
+    valid_records = validated.valid
+    invalid_records = validated.invalid_records
     (
-            p
-            |'Seed'>>beam.Create([None])
-            |'Read From API' >> beam.ParDo(ValidatingDoFn(access_token, session_id=session_id, user_id=user_id))
-            |'ToCSV' >> beam.Map(lambda r: dict_to_csv_line(r, columns))
-            |'WriteToGCS'>> WriteToText(file_path_prefix=f'gs://youtube-pipeline-staging-bucket/{gcs_prefix}{user_id}',file_name_suffix='.csv',shard_name_template='',header=','.join(columns))
+        valid_records
+        | 'Valid To CSV' >> beam.Map(lambda r: dict_to_csv_line(r, columns))
+        | 'Write Valid To GCS' >> WriteToText(file_path_prefix=f'gs://youtube-pipeline-staging-bucket/{gcs_prefix}valid/{user_id}',file_name_suffix='.csv',shard_name_template='',header=','.join(columns))
+    )
+    (
+        invalid_records
+        | 'Invalid To CSV' >> beam.Map(lambda r: f'{r["error"]},"{json.dumps(r["record"])}"')
+        | 'Write Invalid To GCS' >> WriteToText(file_path_prefix=f'gs://youtube-pipeline-staging-bucket/{gcs_prefix}invalid/{user_id}',file_name_suffix='.csv',shard_name_template='',header='error,record_json')
     )
     return p.run()

@@ -9,3 +9,5 @@ requests
 pandas
 flask
 gunicorn
+fsspec
+gcsfs

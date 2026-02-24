@@ -49,7 +49,7 @@ def run_pipeline_for_user(user_id,refresh_token,gcs_prefix,session_id):
     p=beam.Pipeline(options=options)
     validated = (
         p
-        | 'Seed' >> beam.Create(['start'])
+        | 'Seed' >> beam.Create([None])
         | 'Read From API' >> beam.ParDo(ValidatingDoFn(access_token,session_id=session_id,user_id=user_id)).with_outputs("invalid_records", main="valid")
     )
     valid_records = validated.valid

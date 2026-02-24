@@ -4,7 +4,7 @@ from backend.pipelines.Api_Puller import run_pipeline_for_user
 from google.cloud import storage
 import time
 from backend.pipelines.api.gcs_utils import combine_gcs_files_safe
-from backend.pipelines.api.bias_utils import compute_bias_metrics
+from backend.pipelines.api.bias_analyser import compute_bias_metrics
         
 def cleanup_intermediate_files(bucket_name, prefix):
     client = storage.Client()

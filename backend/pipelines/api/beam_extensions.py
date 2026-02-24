@@ -22,6 +22,9 @@ class ValidatingDoFn(beam.DoFn):
 
     def setup(self):
         self._api = ReadFromAPI(self.access_token)
+        if hasattr(self._api, "setup"):
+            self._api.setup()
+
 
     def process(self, element):
         for record in self._api.process(element):

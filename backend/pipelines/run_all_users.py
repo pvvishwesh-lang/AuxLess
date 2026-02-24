@@ -22,11 +22,9 @@ def run_for_session(session_id):
     database_id = os.environ["FIRESTORE_DATABASE"]
 
     fs = FirestoreClient(project_id, database_id)
-
     users = fs.get_session_users(session_id)
     if not users:
         raise RuntimeError("No active users in session")
-
     status=fs.get_session_status(session_id)
     if status not in ['running']:
         print(f"Session {session_id} already processed or not in triggered state. Skipping.")

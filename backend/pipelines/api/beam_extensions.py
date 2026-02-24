@@ -21,7 +21,7 @@ class ValidatingDoFn(beam.DoFn):
             return
         try:
             record = derive_fields(element)
-            validate_record(record, COLUMNS, self.logger)
+            validate_record(record, COLUMNS)
             anomalies = detect_anomalies(record)
             if anomalies:
                 log_anomalies(self.logger, record, anomalies)

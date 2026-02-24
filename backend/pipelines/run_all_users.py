@@ -3,6 +3,8 @@ from backend.pipelines.api.firestore_client import FirestoreClient
 from backend.pipelines.Api_Puller import run_pipeline_for_user
 from google.cloud import storage
 import time
+from backend.pipelines.api.gcs_utils import combine_gcs_files_safe
+
 
 def combine_gcs_files(bucket_name, input_prefix, output_file):
     time.sleep(5)
@@ -75,7 +77,7 @@ def run_for_session(session_id):
         except Exception as e:
             print(f'Error waiting for job: {e}')
     try:
-        combine_gcs_files(bucket, prefix, f"Final_Output/{session_id}_combined.csv")
+        combine_gcs_files_safe(bucket, prefix, f"Final_Output/{session_id}_combined.csv"))
         cleanup_intermediate_files(bucket, prefix)
         fs.update_session_status(session_id, "done")
         print(f"Session {session_id} completed successfully.")

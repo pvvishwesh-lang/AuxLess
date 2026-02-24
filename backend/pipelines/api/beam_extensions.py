@@ -18,6 +18,8 @@ class ValidatingDoFn(beam.DoFn):
         self.user_id = user_id
         self.logger = get_logger(session_id, user_id)
     def process(self, element):
+        if element=='start':
+            return
         try:
             record = derive_fields(element)
             validate_record(record, COLUMNS, self.logger)

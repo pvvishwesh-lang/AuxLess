@@ -3,7 +3,7 @@ from apache_beam.options.pipeline_options import PipelineOptions, GoogleCloudOpt
 from apache_beam.io.textio import WriteToText
 from backend.pipelines.api.auth import GoogleAuthClient
 from backend.pipelines.api.youtube_client import YoutubeClient
-from backend.pipelines.api.ReadFromAPI import ReadFromAPI
+from backend.pipelines.api.beam_extensions import ValidatingDoFn
 from backend.pipelines.api.csv_writer import dict_to_csv_line 
 from apache_beam.runners.runner import PipelineState
 from apache_beam.runners.dataflow import DataflowRunner

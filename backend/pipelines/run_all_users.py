@@ -17,7 +17,7 @@ def cleanup_intermediate_files(bucket_name, prefix):
 
 def run_for_session(session_id):
     bucket = os.environ['BUCKET']
-    prefix = f"user_outputs/{session_id}/"
+    prefix = f"user_outputs/{session_id}/valid/"
     project_id = os.environ["PROJECT_ID"]
     database_id = os.environ["FIRESTORE_DATABASE"]
 

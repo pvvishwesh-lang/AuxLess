@@ -1,3 +1,4 @@
+import logging
 def derive_fields(record):
     raw_millis = record.get('trackTimeMillis', 0)
     if raw_millis in (None, ''):

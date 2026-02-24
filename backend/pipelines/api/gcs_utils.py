@@ -10,16 +10,19 @@ def combine_gcs_files_safe(bucket_name, input_prefix, output_file, retries=3, de
             combined_lines = []
             header = None
             for blob in blobs:
-                if blob.name.endswith('.csv') and 'Final_Output' not in blob.name:
-                    content = blob.download_as_text().splitlines()
-                    if not content: continue
-                    if header is None: header = content[0]
-                    body = [l for l in content if l != header]
-                    combined_lines.extend(body)
-            if header and combined_lines:
+                if not blob.name.endswith('.csv') or 'Final_Output' in blob.name:
+                    continue
+                content = blob.download_as_text().splitlines()
+                if not content: 
+                    continue
+                if header is None: 
+                    header = content[0]
+                body=content[1:] if content[0]==header else content
+                combined_lines.extend(body)
+            if header:
                 out = header + "\n" + "\n".join(combined_lines)
                 bucket.blob(output_file).upload_from_string(out)
-            print(f"Combined {len(blobs)} files into {output_file}")
+                print(f"Combined {len(blobs)} files into {output_file}")
             break
         except Exception as e:
             print(f"Attempt {attempt+1} failed for combining GCS files: {e}")

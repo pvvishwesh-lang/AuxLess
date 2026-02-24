@@ -35,7 +35,7 @@ def run_pipeline_for_user(user_id,refresh_token,gcs_prefix,session_id):
     unique_id=str(uuid.uuid4())[:4]
     access_token=auth.get_access_token()
     yt_client=YoutubeClient(access_token)
-    columns=['playlist_name', 'track_title', 'artist_name', 'video_id', 'genre','country','collection_name','collection_id','trackTimeMillis', 'view_count','like_count','comment_count']
+    columns=['playlist_name', 'track_title', 'artist_name', 'video_id', 'genre','country','collection_name','collection_id','trackTimeMillis', 'view_count','like_count','comment_count','trackTimeSeconds','like_to_view_ratio','comment_to_view_ratio']
     options = PipelineOptions(["--setup_file=./setup.py"])
     google_cloud_options = options.view_as(GoogleCloudOptions)
     google_cloud_options.project = os.environ['PROJECT_ID']

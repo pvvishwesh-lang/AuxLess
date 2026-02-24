@@ -4,7 +4,7 @@ from backend.pipelines.Api_Puller import run_pipeline_for_user
 from google.cloud import storage
 import time
 from backend.pipelines.api.gcs_utils import combine_gcs_files_safe
-
+from backend.pipelines.api.bias_utils import compute_bias_metrics
 
 def combine_gcs_files(bucket_name, input_prefix, output_file):
     time.sleep(5)
@@ -77,10 +77,13 @@ def run_for_session(session_id):
         except Exception as e:
             print(f'Error waiting for job: {e}')
     try:
+        final_csv_path = f'gs://{bucket}/Final_Output/{session_id}_combined.csv'
         combine_gcs_files_safe(bucket, prefix, f"Final_Output/{session_id}_combined.csv"))
         cleanup_intermediate_files(bucket, prefix)
         fs.update_session_status(session_id, "done")
         print(f"Session {session_id} completed successfully.")
+        bias_summary = compute_bias_metrics(final_csv_path, slice_cols=['genre', 'country'])
+        print(f"Bias metrics for session {session_id}: {bias_summary}")
     except Exception as e:
         print(f"Final combination/cleanup failed: {e}")
         fs.update_session_status(session_id, "error")

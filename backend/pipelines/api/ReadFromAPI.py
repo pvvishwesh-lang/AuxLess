@@ -5,6 +5,7 @@ from backend.pipelines.api.itunes_client import ItunesClient
 import logging
 from backend.pipelines.api.beam_extensions import ValidatingDoFn
 from backend.pipelines.api.structured_logger import get_logger
+from backend.pipelines.api.retry_utils import retry
 
 logging.basicConfig(level=logging.INFO)
 
@@ -16,18 +17,10 @@ class ReadFromAPI(beam.DoFn):
     def setup(self):
         self.youtube = YoutubeClient(self.access_token)
         self.itunes = ItunesClient()
-
-    def _retry_request(self,fn,retries=3,delay=2):
-        last_exception=None
-        for i in range(retries):
-            try:
-                return fn()
-            except Exception as e:
-                last_exception=e
-                logging.warning(f"Retry {i+1}/{retries} failed: {e}")
-                sleep(delay*(2**i))
-        logging.error(f"All retries failed: {last_exception}")
-        raise last_exception
+    
+    @retry(retries=3, delay=2)
+    def _retry_request(self,fn):
+        return fn()
                 
         
     def process(self,element):

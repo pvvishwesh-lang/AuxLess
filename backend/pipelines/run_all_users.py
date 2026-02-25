@@ -8,6 +8,9 @@ from backend.pipelines.api.gcs_utils import combine_gcs_files_safe
 from backend.pipelines.api.bias_analyser import compute_bias_metrics
 from backend.pipelines.api.schema_validator import run_schema_validation
 from backend.pipelines.api.alert_manager import run_anomaly_checks_and_alert
+from backend.pipelines.api.pubsub_publisher import publish_session_ready
+
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -105,3 +108,9 @@ def run_for_session(session_id: str):
         run_anomaly_checks_and_alert(bucket, session_id)
     except Exception as e:
         logger.error(f"Anomaly alert failed: {e}")
+    if final_csv_path:
+        try:
+            publish_session_ready(session_id)
+            logger.info(f"Published session-ready event for {session_id}")
+        except Exception as e:
+            logger.error(f"Failed to publish session-ready event: {e}")

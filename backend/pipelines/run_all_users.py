@@ -31,8 +31,8 @@ def write_bias_metrics_to_gcs(bucket_name, session_id, bias_summary):
 
 def run_for_session(session_id):
     bucket = os.environ['BUCKET']
-    prefix_valid = f"{bucket}/user_outputs/{session_id}/valid/"
-    prefix_invalid = f"{bucket}/user_outputs/{session_id}/invalid/"
+    prefix_valid = f"user_outputs/{session_id}/valid"
+    prefix_invalid = f"{bucket}/user_outputs/{session_id}/invalid"
     project_id = os.environ["PROJECT_ID"]
     database_id = os.environ["FIRESTORE_DATABASE"]
     fs = FirestoreClient(project_id, database_id)
@@ -68,11 +68,11 @@ def run_for_session(session_id):
     try:
         combined_valid_path = f'Final_Output/{session_id}_combined_valid.csv'
         logging.info(f'Saving valid file to {combined_valid_path}')
-        combine_gcs_files_safe(bucket_name=bucket, input_prefix=prefix_valid, output_file=combined_valid_path)
+        combine_gcs_files_safe(bucket_name=bucket, input_prefix=f'user_outputs/{session_id}/valid', output_file=combined_valid_path)
         logging.info(f'Saved Valid File')
         combined_invalid_path = f'Final_Output/{session_id}_combined_invalid.csv'
         logging.info(f'Saving invalid file to {combined_invalid_path}')
-        combine_gcs_files_safe(bucket_name=bucket, input_prefix=prefix_invalid, output_file=combined_invalid_path)
+        combine_gcs_files_safe(bucket_name=bucket, input_prefix=f'user_outputs/{session_id}/invalid', output_file=combined_invalid_path)
         logging.info(f'Saved invalid File')
         client = storage.Client()
         blob = client.bucket(bucket).blob(combined_valid_path)
@@ -80,9 +80,9 @@ def run_for_session(session_id):
                 raise RuntimeError("Combined valid file not found in GCS")
         final_csv_path = f'gs://{bucket}/{combined_valid_path}'
         logging.info(f'Combined valid file verified at {final_csv_path}')
-        cleanup_intermediate_files(bucket, prefix_valid)
+        cleanup_intermediate_files(bucket, f'user_outputs/{session_id}/valid')
         logging.info(f'Deleted temp Valid Files')
-        cleanup_intermediate_files(bucket, prefix_invalid)
+        cleanup_intermediate_files(bucket, f'user_outputs/{session_id}/invalid')
         logging.info(f'Deleted temp inValid Files')
         fs.update_session_status(session_id, "done")
         print(f"Session {session_id} completed successfully.")

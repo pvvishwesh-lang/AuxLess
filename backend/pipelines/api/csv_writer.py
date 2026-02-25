@@ -1,9 +1,9 @@
-import io
-import apache_beam as beam
 import csv
+import io
 
-def dict_to_csv_line(record,columns):
-    output = io.StringIO()
-    writer = csv.writer(output)
+
+def dict_to_csv_line(record: dict, columns: list) -> str:
+    buf = io.StringIO()
+    writer = csv.writer(buf)
     writer.writerow([record.get(col, "") for col in columns])
-    return output.getvalue().strip()
+    return buf.getvalue().strip()

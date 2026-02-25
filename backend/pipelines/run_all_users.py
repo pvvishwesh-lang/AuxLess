@@ -5,7 +5,11 @@ from google.cloud import storage
 import time
 from backend.pipelines.api.gcs_utils import combine_gcs_files_safe
 from backend.pipelines.api.bias_analyser import compute_bias_metrics
-        
+import logging
+import json
+
+logging.basicConfig(level=logging.INFO)
+
 def cleanup_intermediate_files(bucket_name, prefix):
     client = storage.Client()
     bucket = client.bucket(bucket_name)
@@ -60,29 +64,42 @@ def run_for_session(session_id):
             job.wait_until_finish()
         except Exception as e:
             print(f'Error waiting for job: {e}')
+    final_csv_path = None
     try:
         combined_valid_path = f'Final_Output/{session_id}_combined_valid.csv'
         logging.info(f'Saving valid file to {combined_valid_path}')
-        combine_gcs_files_safe(bucket, prefix_valid, combined_valid_path)
+        combine_gcs_files_safe(bucket_name=bucket, input_prefix=prefix_valid, output_file=combined_valid_path)
         logging.info(f'Saved Valid File')
         combined_invalid_path = f'Final_Output/{session_id}_combined_invalid.csv'
         logging.info(f'Saving invalid file to {combined_invalid_path}')
-        combine_gcs_files_safe(bucket, prefix_invalid, combined_invalid_path)
+        combine_gcs_files_safe(bucket_name=bucket, input_prefix=prefix_invalid, output_file=combined_invalid_path)
         logging.info(f'Saved invalid File')
+        client = storage.Client()
+        blob = client.bucket(bucket).blob(combined_valid_path)
+        if not blob.exists():
+                raise RuntimeError("Combined valid file not found in GCS")
+        final_csv_path = f'gs://{bucket}/{combined_valid_path}'
+        logging.info(f'Combined valid file verified at {final_csv_path}')
         cleanup_intermediate_files(bucket, prefix_valid)
         logging.info(f'Deleted temp Valid Files')
         cleanup_intermediate_files(bucket, prefix_invalid)
         logging.info(f'Deleted temp inValid Files')
         fs.update_session_status(session_id, "done")
         print(f"Session {session_id} completed successfully.")
-        final_csv_path = f'gs://{bucket}/{combined_valid_path}'
-        logging.info(f'Saving bias file to {final_csv_path}')
-        bias_summary = compute_bias_metrics(final_csv_path, slice_cols=['genre', 'country'])
-        logging.info(f'Getting bias summary: {bias_summary}')
-        write_bias_metrics_to_gcs(bucket, session_id, bias_summary)
-        logging.info(f'Saved Bias metrics!!!')
     except Exception as e:
         print(f"Final combination/cleanup failed: {e}")
         fs.update_session_status(session_id, "error")
-        
+    if final_csv_path:
+        try:
+            logging.info(f'Computing bias from {final_csv_path}')
+            bias_summary = compute_bias_metrics(final_csv_path, slice_cols=['genre', 'country'])
+            logging.info(f'Getting bias summary: {bias_summary}')
+            write_bias_metrics_to_gcs(bucket, session_id, bias_summary)
+            logging.info(f'Saved Bias metrics!!!')
+        except Exception as e:
+            logging.error(f"Error computing bias metrics: {e}")
+    else:
+        logging.warning("Skipping bias computation because final CSV path is not available")
+            
+    
     

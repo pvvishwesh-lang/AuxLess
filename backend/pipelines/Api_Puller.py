@@ -26,7 +26,7 @@ def sanitize_for_job_name(s: str) -> str:
         s = s + '1'
     return s
 
-def run_pipeline_for_user(user_id,refresh_token,gcs_prefix,session_id):
+def run_pipeline_for_user(user_id,refresh_token,prefix_valid,prefix_invalid,session_id):
     auth = GoogleAuthClient(
         token_uri=os.environ["TOKEN_URI"],
         client_id=os.environ["CLIENT_ID"],
@@ -47,7 +47,8 @@ def run_pipeline_for_user(user_id,refresh_token,gcs_prefix,session_id):
     google_cloud_options.temp_location = "gs://youtube-pipeline-staging-bucket/temp"
     options.view_as(StandardOptions).runner = "DataflowRunner"
     google_cloud_options.service_account_email='serviceaccountforgithub@main-shade-485500-a0.iam.gserviceaccount.com'
-    
+    valid_blob_path = f"{prefix_valid}/{user_id}_valid.csv"
+    invalid_blob_path = f"{prefix_invalid}/{user_id}_invalid.csv"
     p=beam.Pipeline(options=options)
     validated = (
         p
@@ -60,11 +61,11 @@ def run_pipeline_for_user(user_id,refresh_token,gcs_prefix,session_id):
     (
         valid_records
         | 'Valid To CSV' >> beam.Map(lambda r: dict_to_csv_line(r, columns))
-        | 'Write Valid To GCS' >> WriteToText(file_path_prefix=f'gs://youtube-pipeline-staging-bucket/{gcs_prefix}valid/{user_id}',file_name_suffix='.csv',shard_name_template='',header=','.join(columns))
+        | 'Write Valid To GCS' >> WriteToText(file_path_prefix=f'gs://{valid_blob_path[:-4]}',file_name_suffix='.csv',shard_name_template='',header=','.join(columns))
     )
     (
         invalid_records
         | 'Invalid To CSV' >> beam.Map(lambda r: f'{r["error"]},"{json.dumps(r["record"])}"')
-        | 'Write Invalid To GCS' >> WriteToText(file_path_prefix=f'gs://youtube-pipeline-staging-bucket/{gcs_prefix}invalid/{user_id}',file_name_suffix='.csv',shard_name_template='',header='error,record_json')
+        | 'Write Invalid To GCS' >> WriteToText(file_path_prefix=f'gs://{invalid_blob_path[:-4]}',file_name_suffix='.csv',shard_name_template='',header='error,record_json')
     )
     return p.run()

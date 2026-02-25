@@ -108,9 +108,9 @@ def run_for_session(session_id: str):
         run_anomaly_checks_and_alert(bucket, session_id)
     except Exception as e:
         logger.error(f"Anomaly alert failed: {e}")
-    if final_csv_path:
-        try:
-            publish_session_ready(session_id)
-            logger.info(f"Published session-ready event for {session_id}")
-        except Exception as e:
-            logger.error(f"Failed to publish session-ready event: {e}")
+    #if final_csv_path:
+        #try:
+            #publish_session_ready(session_id)
+            #logger.info(f"Published session-ready event for {session_id}")
+        #except Exception as e:
+            #logger.error(f"Failed to publish session-ready event: {e}")

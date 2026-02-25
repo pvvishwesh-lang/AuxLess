@@ -63,8 +63,8 @@ def run_for_session(session_id: str):
         except Exception as e:
             logger.error(f"Error waiting for Dataflow job: {e}")
     final_csv_path = None
-    combined_valid_path = f"Final_Output/{session_id}_combined_valid.csv"
-    combined_invalid_path = f"Final_Output/{session_id}_combined_invalid.csv"
+    combined_valid_path = f"Final_Output/{session_id}_valid/{session_id}_combined_valid.csv"
+    combined_invalid_path = f"Final_Output/{session_id}_invalid/{session_id}_combined_invalid.csv"
     try:
         logger.info("Combining valid output files...")
         combine_gcs_files_safe(bucket_name=bucket,input_prefix=prefix_valid,output_file=combined_valid_path)
@@ -89,14 +89,14 @@ def run_for_session(session_id: str):
     try:
         logger.info("Computing bias metrics...")
         bias_summary = compute_bias_metrics(final_csv_path, slice_cols=["genre", "country"])
-        write_json_to_gcs(bucket, f"Final_Output/{session_id}_bias_metrics.json", bias_summary)
+        write_json_to_gcs(bucket, f"Final_Output/{session_id}_bias_metrics/{session_id}_bias_metrics.json", bias_summary)
         logger.info("Bias metrics saved.")
     except Exception as e:
         logger.error(f"Bias metrics failed: {e}")
     try:
         logger.info("Running schema validation...")
         schema_report = run_schema_validation(bucket, session_id)
-        write_json_to_gcs(bucket, f"Final_Output/{session_id}_schema_report.json", schema_report)
+        write_json_to_gcs(bucket, f"Final_Output/{session_id}_schema_report/{session_id}_schema_report.json", schema_report)
         logger.info(f"Schema valid: {schema_report['schema_valid']}, violations: {len(schema_report['schema_violations'])}")
     except Exception as e:
         logger.error(f"Schema validation failed: {e}")

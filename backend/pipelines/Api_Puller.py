@@ -61,11 +61,11 @@ def run_pipeline_for_user(user_id,refresh_token,prefix_valid,prefix_invalid,sess
     (
         valid_records
         | 'Valid To CSV' >> beam.Map(lambda r: dict_to_csv_line(r, columns))
-        | 'Write Valid To GCS' >> WriteToText(file_path_prefix=f'gs://{valid_blob_path[:-4]}',file_name_suffix='.csv',shard_name_template='',header=','.join(columns))
+        | 'Write Valid To GCS' >> WriteToText(file_path_prefix=f'gs://{valid_blob_path}{user_id}',file_name_suffix='.csv',shard_name_template='',header=','.join(columns))
     )
     (
         invalid_records
         | 'Invalid To CSV' >> beam.Map(lambda r: f'{r["error"]},"{json.dumps(r["record"])}"')
-        | 'Write Invalid To GCS' >> WriteToText(file_path_prefix=f'gs://{invalid_blob_path[:-4]}',file_name_suffix='.csv',shard_name_template='',header='error,record_json')
+        | 'Write Invalid To GCS' >> WriteToText(file_path_prefix=f'gs://{invalid_blob_path}{user_id}',file_name_suffix='.csv',shard_name_template='',header='error,record_json')
     )
     return p.run()

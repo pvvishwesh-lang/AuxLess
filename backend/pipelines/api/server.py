@@ -1,32 +1,51 @@
-from flask import Flask, request, jsonify
-from backend.pipelines.run_all_users import run_for_session
 import os
 import base64
+import logging
 import threading
+from flask import Flask, request, jsonify
+from backend.pipelines.run_all_users import run_for_session
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+
+
+def _run_session_safe(session_id: str):
+    """Wrapper so thread failures are logged to Cloud Logging."""
+    try:
+        run_for_session(session_id)
+    except Exception as e:
+        logger.error(f"Session {session_id} failed in background thread: {e}", exc_info=True)
+
 
 @app.route("/", methods=["GET"])
 def health():
     return "OK", 200
 
+
 @app.route("/", methods=["POST"])
 def pubsub_worker():
-    envelope = request.get_json()
+    envelope = request.get_json(silent=True)
     if not envelope:
+        logger.warning("Received request with no JSON body")
         return "Bad Request", 400
+
     pubsub_message = envelope.get("message", {})
     data = pubsub_message.get("data")
     if not data:
+        logger.warning("Pub/Sub message has no data field")
         return "No data", 400
-    session_id = base64.b64decode(data).decode("utf-8")
-    print(f"Received session {session_id}")
+
     try:
-        threading.Thread(target=run_for_session, args=(session_id,), daemon=True).start()
-        return "Accepted", 200
+        session_id = base64.b64decode(data).decode("utf-8").strip()
     except Exception as e:
-        print(f"Pipeline failed: {e}")
-        return "Error", 500
+        logger.error(f"Failed to decode Pub/Sub data: {e}")
+        return "Invalid data encoding", 400
+
+    logger.info(f"Received session_id: {session_id}")
+    thread = threading.Thread(target=_run_session_safe, args=(session_id,), daemon=True)
+    thread.start()
     return jsonify({"status": "accepted", "session_id": session_id}), 202
 
 

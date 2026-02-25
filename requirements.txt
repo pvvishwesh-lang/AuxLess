@@ -11,3 +11,6 @@ flask
 gunicorn
 fsspec
 gcsfs
+scipy
+numpy
+dvc[gs]

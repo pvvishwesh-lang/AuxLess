@@ -31,8 +31,8 @@ def write_bias_metrics_to_gcs(bucket_name, session_id, bias_summary):
 
 def run_for_session(session_id):
     bucket = os.environ['BUCKET']
-    prefix_valid = f"user_outputs/{session_id}/valid/"
-    prefix_invalid = f"user_outputs/{session_id}/invalid/"
+    prefix_valid = f"{bucket}/user_outputs/{session_id}/valid/"
+    prefix_invalid = f"{bucket}/user_outputs/{session_id}/invalid/"
     project_id = os.environ["PROJECT_ID"]
     database_id = os.environ["FIRESTORE_DATABASE"]
     fs = FirestoreClient(project_id, database_id)

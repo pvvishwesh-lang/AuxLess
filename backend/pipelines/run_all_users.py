@@ -49,7 +49,7 @@ def run_for_session(session_id):
     for user_id, refresh_token in users:
         try:
             print(f"Submitting Dataflow job for user: {user_id}")
-            job=run_pipeline_for_user(user_id, refresh_token, prefix_valid, session_id)
+            job=run_pipeline_for_user(user_id, refresh_token, prefix_valid,prefix_invalid,session_id)
             if job:
                 jobs.append(job)
         except Exception as e:

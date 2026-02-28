@@ -13,7 +13,6 @@ app = Flask(__name__)
 
 
 def _run_session_safe(session_id: str):
-    """Wrapper so thread failures are logged to Cloud Logging."""
     try:
         run_for_session(session_id)
     except Exception as e:

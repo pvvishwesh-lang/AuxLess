@@ -5,8 +5,7 @@ import apache_beam as beam
 from apache_beam.testing.test_pipeline import TestPipeline
 from apache_beam.testing.util import assert_that
 from unittest.mock import patch
-from backend.pipelines.streaming.stream_pipeline import ParseEventFn, _require_env
-
+from backend.pipelines.stream_pipeline import ParseEventFn, _require_env
 
 class TestRequireEnv:
 

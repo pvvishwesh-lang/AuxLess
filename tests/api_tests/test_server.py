@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 @pytest.fixture
 def app():
     import importlib
-    import server
+    from backend.pipelines.api import server
     importlib.reload(server)
     server.app.config["TESTING"] = True
     return server.app

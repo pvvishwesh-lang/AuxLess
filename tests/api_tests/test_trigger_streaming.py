@@ -1,6 +1,9 @@
 import sys
-from unittest.mock import patch,MagicMock
+from unittest.mock import patch, MagicMock
 sys.modules["functions_framework"] = MagicMock()
+sys.modules["google.events"] = MagicMock()
+sys.modules["google.events.cloud"] = MagicMock()
+sys.modules["google.events.cloud.firestore_v1"] = MagicMock()
 
 import base64
 import json

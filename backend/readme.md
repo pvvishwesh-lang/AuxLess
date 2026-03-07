@@ -34,6 +34,22 @@ Pipelines pull user playlist data using custom ReadFromAPI class, performs schem
 
 Updates Firestore status to 'done'
 
+
+### PIPELINE ORCHESTRATION
+This pipeline uses Cloud Run as the orchestration layer in place of Airflow, 
+which satisfies the requirement for a similar orchestration tool.
+
+| Airflow Concept     | Implementation                          |
+|---------------------|-----------------------------------------|
+| DAG                 | `run_for_session()` in Cloud Run        |
+| Task dependencies   | Sequential calls with error handling    |
+| Triggers            | Pub/Sub events                          |
+| Workers             | Dataflow jobs per user                  |
+| Monitoring          | Cloud Logging + Slack alerts            |
+| Retry logic         | `retry_utils.py` exponential backoff    |
+| Task status         | Firestore session status tracking       |
+
+
 ### SETUP
 #### Clone Repo
 git clone <repo_url>
@@ -91,14 +107,32 @@ Distribution by genre and country
 genre
 country
 
+### BIAS MITIGATION
+Detected bias is mitigated using two techniques:
+- **Upsampling**: Slices below 5% representation are oversampled to reach the threshold
+- **Downsampling**: Slices above 60% dominance are reduced to that cap
+A mitigation report is saved to GCS documenting before/after proportions per slice, 
+which slices were adjusted, and trade-offs made (overfitting risk vs representation equity)
+
+### RUNNING THE PIPELINE
+1. Create a Firestore session document with status='pending' and user refresh tokens
+2. The Cloud Function triggers automatically on document creation
+3. Monitor progress via Cloud Logging or Firestore session status field
+4. Outputs are written to GCS under Final_Output/{session_id}_*
+
 #### Metrics per slice:
 Mean like/view ratio
 Mean comment/view ratio
 Record counts
 
 ### DATA VERSIONING
-DVC enabled for local usage. On Cloud, Data versioning happens with the help of GCS
-
+DVC is configured with a GCS remote for local reproducibility.
+To initialize:
+    dvc init
+    dvc remote add -d gcs_remote gs://your-bucket/dvc-store
+    dvc push
+Pipeline stages are defined in dvc.yaml covering fetch, validate, bias_check, and schema_validate.
+On Cloud, GCS path conventions ensure each session's outputs are versioned by session_id.
 
 ### LOGGING & MONITORING
 #### Logging includes:

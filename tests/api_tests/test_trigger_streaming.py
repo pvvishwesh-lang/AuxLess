@@ -36,8 +36,8 @@ class TestTriggerStreamingPipeline:
 
         cloud_event = _make_cloud_event(session_id)
         with patch.dict(os.environ, ENV):
-            from cloud_functions.trigger_streaming.main import trigger_streaming_pipeline
-            with patch("cloud_functions.trigger_streaming.main.build", mock_dataflow):
+            from backend.functions.google_cloud_function import trigger_streaming_pipeline
+            with patch("backend.functions.google_cloud_function.build", mock_dataflow):
                 trigger_streaming_pipeline(cloud_event)
 
         return mock_launch, mock_execute
@@ -73,8 +73,8 @@ class TestTriggerStreamingPipeline:
         mock_event.data = {"message": {"data": "not_valid_base64!!!"}}
 
         with patch.dict(os.environ, ENV):
-            from cloud_functions.trigger_streaming.main import trigger_streaming_pipeline
-            with patch("cloud_functions.trigger_streaming.main.build") as mock_build:
+            from backend.functions.google_cloud_function import trigger_streaming_pipeline
+            with patch("backend.functions.google_cloud_function.build") as mock_build:
                 trigger_streaming_pipeline(mock_event)
 
         mock_build.assert_not_called()
@@ -85,8 +85,8 @@ class TestTriggerStreamingPipeline:
         mock_event.data = {"message": {"data": encoded}}
 
         with patch.dict(os.environ, ENV):
-            from cloud_functions.trigger_streaming.main import trigger_streaming_pipeline
-            with patch("cloud_functions.trigger_streaming.main.build") as mock_build:
+            from backend.functions.google_cloud_function import trigger_streaming_pipeline
+            with patch("backend.functions.google_cloud_function.build") as mock_build:
                 trigger_streaming_pipeline(mock_event)
 
         mock_build.assert_not_called()
@@ -102,8 +102,8 @@ class TestTriggerStreamingPipeline:
         cloud_event = _make_cloud_event("sess_fail")
 
         with patch.dict(os.environ, ENV):
-            from cloud_functions.trigger_streaming.main import trigger_streaming_pipeline
-            with patch("cloud_functions.trigger_streaming.main.build", mock_dataflow):
+            from backend.functions.google_cloud_function import trigger_streaming_pipeline
+            with patch("backend.functions.google_cloud_function.build", mock_dataflow):
                 try:
                     trigger_streaming_pipeline(cloud_event)
                 except Exception:

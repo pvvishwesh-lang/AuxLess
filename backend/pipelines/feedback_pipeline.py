@@ -8,7 +8,7 @@ import json
 import logging
 import os
 
-from backend.pipelines.api.feedback_processor import (
+from backend.pipelines.feedback_processor import (
     ParseFeedbackFn,
     FilterBySessionFn,
     ScoreFeedbackFn,

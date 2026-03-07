@@ -51,7 +51,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          pip install -r requirements-dev.txt
+          pip install -r tests/api_tests/requirements-dev.txt
 
       - name: Run all tests with coverage
         run: |

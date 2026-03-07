@@ -1,8 +1,11 @@
+import sys
+from unittest.mock import patch,MagicMock
+sys.modules["functions_framework"] = MagicMock()
+
 import base64
 import json
 import os
 import pytest
-from unittest.mock import patch, MagicMock
 
 
 def _make_cloud_event(session_id: str):

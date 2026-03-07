@@ -1,0 +1,6 @@
+[run]
+omit =
+    backend/pipelines/Api_Puller.py
+    backend/pipelines/api/ReadFromAPI.py
+    backend/pipelines/feedback_pipeline.py
+    backend/pipelines/run_all_users.py

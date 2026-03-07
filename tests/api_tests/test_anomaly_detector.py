@@ -6,8 +6,7 @@ from unittest.mock import MagicMock
 class TestDetectAnomalies:
 
     def test_clean_record_no_anomalies(self, derived_record):
-        anomalies = detect_anomalies(derived_record)
-        assert anomalies == []
+        assert detect_anomalies(derived_record) == []
 
     def test_zero_views_flagged(self, derived_record):
         derived_record["view_count"] = 0

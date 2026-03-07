@@ -21,8 +21,8 @@ class TestDeriveFields:
 
     def test_like_to_view_ratio(self, valid_raw_record):
         result = derive_fields(dict(valid_raw_record))
-        assert result["like_to_view_ratio"]    == pytest.approx(0.05,    abs=1e-4)
-        assert result["comment_to_view_ratio"] == pytest.approx(0.003,   abs=1e-4)
+        assert result["like_to_view_ratio"]    == pytest.approx(0.05,  abs=1e-4)
+        assert result["comment_to_view_ratio"] == pytest.approx(0.003, abs=1e-4)
 
     def test_zero_view_count_no_division_error(self, valid_raw_record):
         valid_raw_record["view_count"] = "0"
@@ -54,7 +54,7 @@ class TestDeriveFields:
     def test_negative_counts_coerced(self, valid_raw_record):
         valid_raw_record["like_count"] = "-5"
         result = derive_fields(dict(valid_raw_record))
-        assert result["like_count"] == -5  
+        assert result["like_count"] == -5
 
     def test_missing_counts_default_zero(self, valid_raw_record):
         del valid_raw_record["like_count"]

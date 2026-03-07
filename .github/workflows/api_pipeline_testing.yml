@@ -63,11 +63,11 @@ jobs:
             -v \
             --tb=short \
             --cov=backend \
+            --cov-config=tests/api_tests/.coveragerc \
             --cov-report=term-missing \
             --cov-report=xml:coverage.xml \
-            --cov-fail-under=65 \
-            --cov-omit="backend/pipelines/Api_Puller.py,backend/pipelines/api/ReadFromAPI.py,backend/pipelines/feedback_pipeline.py,backend/pipelines/run_all_users.py"
-
+            --cov-fail-under=65
+            
       - name: Upload coverage report
         uses: codecov/codecov-action@v4
         with:

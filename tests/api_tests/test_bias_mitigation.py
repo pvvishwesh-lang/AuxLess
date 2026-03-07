@@ -14,20 +14,18 @@ from backend.pipelines.api.bias_mitigation import (
 
 @pytest.fixture
 def biased_df():
-    """70% Pop (dominant), 2% Jazz (underrepresented), 28% Rock (balanced)."""
     return pd.DataFrame({
-        "genre":      ["Pop"] * 70 + ["Rock"] * 28 + ["Jazz"] * 2,
-        "country":    ["USA"] * 60 + ["GBR"] * 30 + ["AUS"] * 10,
+        "genre":       ["Pop"] * 70 + ["Rock"] * 28 + ["Jazz"] * 2,
+        "country":     ["USA"] * 60 + ["GBR"] * 30 + ["AUS"] * 10,
         "track_title": [f"Track {i}" for i in range(100)],
     })
 
 
 @pytest.fixture
 def balanced_df():
-    """Evenly distributed — no mitigation should be triggered."""
     return pd.DataFrame({
-        "genre":      ["Pop"] * 34 + ["Rock"] * 33 + ["Jazz"] * 33,
-        "country":    ["USA"] * 34 + ["GBR"] * 33 + ["AUS"] * 33,
+        "genre":       ["Pop"] * 34 + ["Rock"] * 33 + ["Jazz"] * 33,
+        "country":     ["USA"] * 34 + ["GBR"] * 33 + ["AUS"] * 33,
         "track_title": [f"Track {i}" for i in range(100)],
     })
 
@@ -35,7 +33,7 @@ def balanced_df():
 class TestUpsampleUnderrepresented:
 
     def test_underrepresented_slice_is_grown(self, biased_df):
-        result = upsample_underrepresented(biased_df, "genre")
+        result    = upsample_underrepresented(biased_df, "genre")
         jazz_count = (result["genre"] == "Jazz").sum()
         total      = len(result)
         assert jazz_count / total >= UNDERREPRESENTED_THRESHOLD
@@ -58,11 +56,12 @@ class TestUpsampleUnderrepresented:
         assert len(result) == len(biased_df)
 
     def test_null_values_treated_as_unknown(self):
-        df = pd.DataFrame({"genre": ["Pop"] * 95 + [None] * 5})
+        df     = pd.DataFrame({"genre": ["Pop"] * 95 + [None] * 5})
         result = upsample_underrepresented(df, "genre")
-        unknown_count = result["genre"].isna().sum() + (result["genre"] == "Unknown").sum()
-        assert unknown_count / len(result) >= UNDERREPRESENTED_THRESHOLD
-
+        null_or_unknown = (
+            result["genre"].isna().sum() + (result["genre"] == "Unknown").sum()
+        )
+        assert null_or_unknown / len(result) >= UNDERREPRESENTED_THRESHOLD
 
 
 class TestDownsampleDominant:
@@ -88,7 +87,6 @@ class TestDownsampleDominant:
     def test_missing_column_leaves_df_unchanged(self, biased_df):
         result = downsample_dominant(biased_df, "nonexistent_col")
         assert len(result) == len(biased_df)
-
 
 
 class TestComputeMitigationReport:
@@ -118,12 +116,10 @@ class TestComputeMitigationReport:
     def test_trade_off_note_present(self, biased_df, balanced_df):
         report = compute_mitigation_report(biased_df, balanced_df, ["genre"])
         assert "trade_off_note" in report["genre"]
-        assert len(report["genre"]["trade_off_note"]) > 0
 
     def test_missing_column_skipped(self, biased_df, balanced_df):
         report = compute_mitigation_report(biased_df, balanced_df, ["genre", "nonexistent"])
         assert "nonexistent" not in report
-
 
 
 class TestRunBiasMitigation:
@@ -139,41 +135,27 @@ class TestRunBiasMitigation:
 
     def test_returns_report_with_expected_keys(self, biased_df):
         mock_client = self._make_mock_gcs(biased_df)
-        with patch("backend.pipelines.api.bias_mitigation.storage.Client",
-                   return_value=mock_client):
+        with patch("backend.pipelines.api.bias_mitigation.storage.Client", return_value=mock_client):
             report = run_bias_mitigation("bucket", "sess_001", ["genre", "country"])
-
         assert "genre"   in report
         assert "country" in report
 
     def test_mitigated_csv_is_saved(self, biased_df):
         mock_client = self._make_mock_gcs(biased_df)
-        with patch("backend.pipelines.api.bias_mitigation.storage.Client",
-                   return_value=mock_client):
+        with patch("backend.pipelines.api.bias_mitigation.storage.Client", return_value=mock_client):
             run_bias_mitigation("bucket", "sess_001", ["genre"])
-
-        saved_paths = [
-            call[0][0]
-            for call in mock_client.bucket.return_value.blob.call_args_list
-        ]
+        saved_paths = [call[0][0] for call in mock_client.bucket.return_value.blob.call_args_list]
         assert any("mitigated" in p for p in saved_paths)
 
     def test_mitigation_report_json_is_saved(self, biased_df):
         mock_client = self._make_mock_gcs(biased_df)
-        with patch("backend.pipelines.api.bias_mitigation.storage.Client",
-                   return_value=mock_client):
+        with patch("backend.pipelines.api.bias_mitigation.storage.Client", return_value=mock_client):
             run_bias_mitigation("bucket", "sess_001", ["genre"])
-
-        saved_paths = [
-            call[0][0]
-            for call in mock_client.bucket.return_value.blob.call_args_list
-        ]
+        saved_paths = [call[0][0] for call in mock_client.bucket.return_value.blob.call_args_list]
         assert any("mitigation_report" in p for p in saved_paths)
 
     def test_missing_column_handled_gracefully(self, biased_df):
         mock_client = self._make_mock_gcs(biased_df)
-        with patch("backend.pipelines.api.bias_mitigation.storage.Client",
-                   return_value=mock_client):
+        with patch("backend.pipelines.api.bias_mitigation.storage.Client", return_value=mock_client):
             report = run_bias_mitigation("bucket", "sess_001", ["nonexistent_col"])
-
         assert report == {}

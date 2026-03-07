@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Test Suite
+    name: Pipeline Tests
     runs-on: ubuntu-latest
 
     env:

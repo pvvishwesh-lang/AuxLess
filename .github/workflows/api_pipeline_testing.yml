@@ -43,7 +43,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt', 'tests/api_tests/requirements-dev.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
@@ -55,8 +55,7 @@ jobs:
 
       - name: Create package __init__.py files
         run: |
-          touch cloud_functions/__init__.py
-          touch cloud_functions/trigger_streaming/__init__.py
+          touch backend/functions/__init__.py
 
       - name: Run all tests with coverage
         run: |

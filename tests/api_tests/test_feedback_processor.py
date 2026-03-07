@@ -1,7 +1,7 @@
 import json
 import pytest
 from unittest.mock import MagicMock
-from backend.pipelines.streaming.feedback_processor import (
+from backend.pipelines.feedback_processor import (
     ParseFeedbackFn,
     FilterBySessionFn,
     ScoreFeedbackFn,

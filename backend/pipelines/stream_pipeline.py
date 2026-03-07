@@ -15,7 +15,6 @@ from apache_beam.transforms.trigger import (
     AfterProcessingTime,
     AccumulationMode,
 )
-
 from backend.pipelines.feedback_processor import (
     ParseFeedbackFn,
     FilterBySessionFn,

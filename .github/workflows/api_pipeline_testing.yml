@@ -1,29 +1,70 @@
-name: Pipeline Tests
+name: Run Tests
 
 on:
   push:
-    branches: [main]
-    paths:
-      - 'backend/pipelines/**'
+    branches: [main, develop]
   pull_request:
-    branches: [main]
-    paths:
-      - 'backend/pipelines/**'
+    branches: [main, develop]
 
 jobs:
   test:
+    name: Test Suite
     runs-on: ubuntu-latest
+
+    env:
+      GCP_PROJECT_ID:       test-project
+      GCP_REGION:           us-central1
+      PUBSUB_TOPIC:         projects/test-project/topics/feedback-events
+      GCS_TEMP_LOCATION:    gs://test-bucket/temp
+      GCS_STAGING_LOCATION: gs://test-bucket/staging
+      GCS_RAW_EVENTS_PATH:  gs://test-bucket/raw
+      BQ_TABLE:             test-project:dataset.table
+      FIRESTORE_DATABASE:   test-db
+      PROJECT_ID:           test-project
+      BUCKET:               test-bucket
+      TOKEN_URI:            https://oauth2.googleapis.com/token
+      CLIENT_ID:            test-client-id
+      CLIENT_SECRET:        test-client-secret
+      REDIRECT_URIS:        http://localhost
+      SERVICE_ACCOUNT_EMAIL: test@test-project.iam.gserviceaccount.com
+      SESSION_READY_TOPIC:  session-ready
+      FEEDBACK_TOPIC:       feedback-events
+
     steps:
-      - uses: actions/checkout@v3
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: "3.11"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install dependencies
         run: |
+          pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-mock
-      - name: Run tests
+          pip install -r requirements-dev.txt
+
+      - name: Run all tests with coverage
         run: |
-          export PYTHONPATH=$PYTHONPATH:.
-          pytest -v tests/api_tests
+          pytest tests/api_tests/ \
+            -v \
+            --tb=short \
+            --cov=backend \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-fail-under=80
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v4
+        with:
+          file: coverage.xml
+          fail_ci_if_error: false

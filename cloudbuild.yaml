@@ -18,7 +18,7 @@ steps:
         "europe-west1",
         "--platform",
         "managed",
-        "--allow-unauthenticated"
+        "--allow-unauthenticated",
         "--min-instances",
         "1",
         "--max-instances",

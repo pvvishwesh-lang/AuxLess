@@ -18,7 +18,7 @@ def _count_data_rows(bucket: object, blob_path: str) -> int:
     if not blob.exists():
         return 0
     lines = blob.download_as_text().splitlines()
-    return max(0, len(lines) - 1)  # subtract header row
+    return max(0, len(lines) - 1) 
 
 
 def compute_session_anomalies(bucket_name: str, session_id: str) -> dict:
@@ -39,7 +39,7 @@ def compute_session_anomalies(bucket_name: str, session_id: str) -> dict:
                 "message":   f"{invalid_pct:.1f}% of records failed validation ({invalid_count}/{total})"
             }
 
-    bias_blob = bucket.blob(f"Final_Output/{session_id}_bias_metrics.json")
+    bias_blob = bucket.blob(f"Final_Output/{session_id}_bias_metrics/{session_id}_bias_metrics.json")
     if bias_blob.exists():
         bias = json.loads(bias_blob.download_as_text())
         genre_data = bias.get("slices", {}).get("genre", {})

@@ -34,7 +34,7 @@ class TestPubsubWorker:
 
     def test_valid_message_accepted(self, client):
         payload = {"message": {"data": _encode("sess_abc123")}}
-        with patch("server.threading.Thread") as mock_thread:
+        with patch("backend.pipelines.api.server.threading.Thread") as mock_thread:
             mock_thread.return_value.start = MagicMock()
             res = client.post("/", json=payload)
         assert res.status_code == 202
@@ -52,7 +52,7 @@ class TestPubsubWorker:
 
     def test_thread_is_started(self, client):
         payload = {"message": {"data": _encode("sess_xyz")}}
-        with patch("server.threading.Thread") as mock_thread_cls:
+        with patch("backend.pipelines.api.server.threading.Thread") as mock_thread_cls:
             mock_thread_instance = MagicMock()
             mock_thread_cls.return_value = mock_thread_instance
             client.post("/", json=payload)

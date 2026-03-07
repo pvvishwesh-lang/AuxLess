@@ -126,13 +126,19 @@ Mean comment/view ratio
 Record counts
 
 ### DATA VERSIONING
-DVC is configured with a GCS remote for local reproducibility.
-To initialize:
-    dvc init
-    dvc remote add -d gcs_remote gs://your-bucket/dvc-store
-    dvc push
-Pipeline stages are defined in dvc.yaml covering fetch, validate, bias_check, and schema_validate.
-On Cloud, GCS path conventions ensure each session's outputs are versioned by session_id.
+Data versioning is handled through GCS path conventions. Each session's outputs 
+are namespaced by session_id, ensuring every pipeline run produces isolated, 
+traceable artifacts:
+
+    Final_Output/{session_id}_combined_valid.csv
+    Final_Output/{session_id}_combined_invalid.csv
+    Final_Output/{session_id}_bias_metrics/{session_id}_bias_metrics.json
+    Final_Output/{session_id}_schema_report/{session_id}_schema_report.json
+    Final_Output/{session_id}_mitigated.csv
+    Final_Output/{session_id}_mitigation_report.json
+
+This provides a complete audit trail per session without requiring DVC. 
+Intermediate files are cleaned up post-run while final outputs are retained permanently.
 
 ### LOGGING & MONITORING
 #### Logging includes:

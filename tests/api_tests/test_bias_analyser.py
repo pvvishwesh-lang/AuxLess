@@ -7,7 +7,7 @@ from backend.pipelines.api.bias_analyser import compute_bias_metrics, _slice_sta
 def sample_df():
     return pd.DataFrame({
         "genre":   ["Pop"] * 70 + ["Rock"] * 20 + ["Jazz"] * 10,
-        "country": ["USA"] * 60 + ["GBR"] * 25 + ["AUS"] * 15,
+        "country": ["USA"] * 61 + ["GBR"] * 25 + ["AUS"] * 14,
     })
 
 
@@ -37,7 +37,7 @@ class TestSliceStats:
         assert _slice_stats(df, "genre")["entropy"] == pytest.approx(0.0, abs=1e-4)
 
     def test_underrepresented_flags_small_slices(self):
-        df = pd.DataFrame({"genre": ["Pop"] * 98 + ["Jazz"] * 1 + ["Rock"] * 1})
+        df = pd.DataFrame({"genre": ["Pop"] * 198 + ["Jazz"] * 1 + ["Rock"] * 1})
         assert "Jazz" in _slice_stats(df, "genre")["underrepresented"]
 
 

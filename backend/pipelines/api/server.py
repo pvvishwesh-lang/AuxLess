@@ -5,9 +5,16 @@ import threading
 from flask import Flask, request, jsonify
 from backend.pipelines.run_all_users import run_for_session
 from backend.pipelines.api.pubsub_publisher import publish_feedback_event
+import sys
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    stream=sys.stdout,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger(__name__)
+
+
 
 app = Flask(__name__)
 

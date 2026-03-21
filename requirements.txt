@@ -14,3 +14,4 @@ gcsfs
 scipy
 numpy
 dvc[gs]
+pyopenssl

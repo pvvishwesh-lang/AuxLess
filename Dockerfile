@@ -9,5 +9,6 @@ RUN pip install  --no-cache-dir -r requirements.txt
 COPY . .
 ENV PYTHONPATH=/app
 ENV PORT=8080
+ENV PYTHONUNBUFFERED=1
 EXPOSE 8080
 CMD ["python", "-m", "gunicorn", "--bind", ":8080", "--workers", "1", "--threads", "8", "--timeout", "0", "backend.pipelines.api.server:app"]

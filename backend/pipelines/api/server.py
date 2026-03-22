@@ -17,10 +17,6 @@ if not logger.handlers:
     handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
     logger.addHandler(handler)
-else:
-    for h in logger.handlers:
-        if hasattr(h, 'setStream'):
-            h.setStream(sys.stderr)
 
 app = Flask(__name__)
 

@@ -9,7 +9,7 @@ from backend.pipelines.run_all_users import run_for_session
 from backend.pipelines.api.pubsub_publisher import publish_feedback_event
 from backend.pipelines.api.firestore_client import FirestoreClient
 from backend.pipelines.api.bq_sync import sync_session_to_bigquery
-from ml.ml_trigger import _run_ml_session
+#from ml.ml_trigger import _run_ml_session
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -33,14 +33,14 @@ def _run_session_safe(session_id: str):
         )
 
 
-def _run_ml_session_safe(session_id: str):
-    try:
-        _run_ml_session(session_id)
-    except Exception as e:
-        logging.getLogger(__name__).error(
-            f"ML session {session_id} failed in background thread: {e}",
-            exc_info=True
-        )
+#def _run_ml_session_safe(session_id: str):
+    #try:
+        #_run_ml_session(session_id)
+    #except Exception as e:
+        #logging.getLogger(__name__).error(
+            #f"ML session {session_id} failed in background thread: {e}",
+            #exc_info=True
+        #)
 
 @app.route("/", methods=["GET"])
 def health():
@@ -74,31 +74,31 @@ def pubsub_worker():
     thread.start()
     return jsonify({"status": "accepted", "session_id": session_id}), 202
 
-@app.route("/ml", methods=["POST"])
-def ml_worker():
-    envelope = request.get_json(silent=True)
-    if not envelope:
-        logging.getLogger(__name__).warning("ML endpoint received request with no JSON body")
-        return "Bad Request", 400
-    pubsub_message = envelope.get("message", {})
-    data = pubsub_message.get("data")
-    if not data:
-        logging.getLogger(__name__).warning("ML Pub/Sub message has no data field")
-        return "No data", 400
-    try:
-        payload    = json.loads(base64.b64decode(data).decode("utf-8"))
-        session_id = payload["session_id"]
-    except Exception as e:
-        logging.getLogger(__name__).error(f"Failed to decode ML Pub/Sub data: {e}")
-        return "Invalid data encoding", 400
-    logging.getLogger(__name__).info(f"ML pipeline triggered for session: {session_id}")
-    thread = threading.Thread(
-        target=_run_ml_session_safe,
-        args=(session_id,),
-        daemon=True
-    )
-    thread.start()
-    return jsonify({"status": "accepted", "session_id": session_id}), 202
+#@app.route("/ml", methods=["POST"])
+#def ml_worker():
+    #envelope = request.get_json(silent=True)
+    #if not envelope:
+        #logging.getLogger(__name__).warning("ML endpoint received request with no JSON body")
+        #return "Bad Request", 400
+    #pubsub_message = envelope.get("message", {})
+    #data = pubsub_message.get("data")
+    #if not data:
+        #logging.getLogger(__name__).warning("ML Pub/Sub message has no data field")
+        #return "No data", 400
+    #try:
+        #payload    = json.loads(base64.b64decode(data).decode("utf-8"))
+        #session_id = payload["session_id"]
+    #except Exception as e:
+        #logging.getLogger(__name__).error(f"Failed to decode ML Pub/Sub data: {e}")
+        #return "Invalid data encoding", 400
+    #logging.getLogger(__name__).info(f"ML pipeline triggered for session: {session_id}")
+    #thread = threading.Thread(
+        #target=_run_ml_session_safe,
+        #args=(session_id,),
+        #daemon=True
+    #)
+    #thread.start()
+    #return jsonify({"status": "accepted", "session_id": session_id}), 202
 
 @app.route("/end_session", methods=["POST"])
 def end_session():

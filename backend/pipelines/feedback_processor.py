@@ -59,8 +59,9 @@ class UpdateFirestoreFn(beam.DoFn):
             database=self.database_id
         )
     def process(self, element):
-        video_id    = element["video_id"]
-        action      = element["action"]
+        video_id = element["video_id"]
+        user_id = element["user_id"]
+        action = element["action"]
         score_delta = element["score_delta"]
         track_ref = (
             self.db
@@ -71,17 +72,34 @@ class UpdateFirestoreFn(beam.DoFn):
         )
         count_field = f"{action}_count"
         track_ref.set(
-        {
-            "score":       Increment(score_delta),
-            count_field:   Increment(1),
-            "last_updated": SERVER_TIMESTAMP,
-            "video_id":    video_id,
-        },
-        merge=True  
+            {
+                "score":       Increment(score_delta),
+                count_field:   Increment(1),
+                "last_updated": SERVER_TIMESTAMP,
+                "video_id":    video_id,
+            },
+            merge=True
+        )
+        user_action_ref = (
+            self.db
+            .collection("sessions")
+            .document(self.session_id)
+            .collection("user_feedback")
+            .document(f"{user_id}_{video_id}")
+        )
+        user_action_ref.set(
+            {
+                "user_id":      user_id,
+                "video_id":     video_id,
+                "action":       action,
+                "score_delta":  score_delta,
+                "last_updated": SERVER_TIMESTAMP,
+            },
+            merge=True
         )
 
         logger.info(
             f"Updated Firestore: session={self.session_id} "
-            f"video={video_id} action={action} delta={score_delta}"
+            f"user={user_id} video={video_id} action={action} delta={score_delta}"
         )
-        yield element  
+        yield element

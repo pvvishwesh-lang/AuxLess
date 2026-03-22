@@ -11,7 +11,6 @@ from backend.pipelines.api.alert_manager import run_anomaly_checks_and_alert
 from backend.pipelines.api.pubsub_publisher import publish_session_ready
 from backend.pipelines.api.bias_mitigation import run_bias_mitigation
 
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -52,7 +51,7 @@ def run_for_session(session_id: str):
         raise RuntimeError(f"No active users found in session {session_id}")
 
     logger.info(f"Starting pipelines for {len(users)} users in session {session_id}")
-    
+
     session_root   = f"sessions/{session_id}"
     prefix_valid   = f"user_outputs/{session_id}/valid"
     prefix_invalid = f"user_outputs/{session_id}/invalid"
@@ -188,16 +187,3 @@ def run_for_session(session_id: str):
         logger.info(f"Published session-ready event for {session_id}")
     except Exception as e:
         logger.error(f"Failed to publish session-ready event: {e}")
-
-    try:
-        logger.info("Syncing session data to BigQuery...")
-        user_ids = [uid for uid, _ in users]
-        sync_session_to_bigquery(
-            session_id=session_id,
-            project_id=project_id,
-            database_id=database_id,
-            user_ids=user_ids
-        )
-        logger.info(f"BQ sync complete for session {session_id}")
-    except Exception as e:
-        logger.error(f"BQ sync failed: {e}")

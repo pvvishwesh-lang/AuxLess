@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 UNDERREPRESENTED_THRESHOLD = 0.05
 DOMINANCE_THRESHOLD        = 0.60
 
-
 def _load_df(bucket_name: str, blob_path: str) -> pd.DataFrame:
     client  = storage.Client()
     content = client.bucket(bucket_name).blob(blob_path).download_as_text()

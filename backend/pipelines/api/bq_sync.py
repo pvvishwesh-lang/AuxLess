@@ -22,72 +22,59 @@ def sync_session_to_bigquery(
 ):
     db = firestore.Client(project=project_id, database=database_id)
     bq = bigquery.Client(project=project_id)
-
-    tracks_ref = (
+    feedback_ref = (
         db.collection("sessions")
         .document(session_id)
-        .collection("tracks")
+        .collection("user_feedback")
     )
-    track_docs = list(tracks_ref.stream())
+    feedback_docs = list(feedback_ref.stream())
 
-    if not track_docs:
-        logger.info(f"No track data in Firestore for session {session_id}, skipping BQ sync.")
+    if not feedback_docs:
+        logger.info(f"No user feedback in Firestore for session {session_id}, skipping BQ sync.")
         return
 
-    logger.info(f"Syncing {len(track_docs)} tracks from session {session_id} to BigQuery")
-
+    logger.info(f"Syncing {len(feedback_docs)} feedback entries from session {session_id} to BigQuery")
     history_rows = []
-    user_preferences = {}  
-
-    if user_ids:
-        for uid in user_ids:
-            user_preferences[uid] = {
-                "liked": set(),
-                "disliked": set(),
-                "skipped": set(),
-                "replayed": set(),
-            }
-
-    for doc in track_docs:
+    user_preferences = {}
+    for doc in feedback_docs:
         data = doc.to_dict()
-        video_id = data.get("video_id", doc.id)
+        user_id  = data.get("user_id")
+        video_id = data.get("video_id")
+        action   = data.get("action")
+        score_delta = data.get("score_delta", 0.0)
         ts = data.get("last_updated")
-
+        if not user_id or not video_id or not action:
+            continue
         if isinstance(ts, datetime):
             ts_str = ts.isoformat()
         elif ts:
             ts_str = str(ts)
         else:
             ts_str = datetime.utcnow().isoformat()
-
-        for action in ["like", "dislike", "skip", "replay"]:
-            count = data.get(f"{action}_count", 0)
-            if count <= 0:
-                continue
-
-            for _ in range(count):
-                history_rows.append({
-                    "session_id":  session_id,
-                    "user_id":     "session_aggregate",
-                    "video_id":    video_id,
-                    "action":      action,
-                    "score_delta": WEIGHTS.get(action, 0.0),
-                    "timestamp":   ts_str,
-                })
-
-            action_to_pref = {
-                "like": "liked",
-                "dislike": "disliked",
-                "skip": "skipped",
-                "replay": "replayed",
+        history_rows.append({
+            "session_id":  session_id,
+            "user_id":     user_id,
+            "video_id":    video_id,
+            "action":      action,
+            "score_delta": score_delta,
+            "timestamp":   ts_str,
+        })
+        if user_id not in user_preferences:
+            user_preferences[user_id] = {
+                "liked": set(),
+                "disliked": set(),
+                "skipped": set(),
+                "replayed": set(),
             }
-            pref_key = action_to_pref.get(action)
-
-            for uid in user_preferences:
-                if pref_key:
-                    user_preferences[uid].add(video_id) if False else None
-                    user_preferences[uid][pref_key].add(video_id)
-
+        action_to_pref = {
+            "like": "liked",
+            "dislike": "disliked",
+            "skip": "skipped",
+            "replay": "replayed",
+        }
+        pref_key = action_to_pref.get(action)
+        if pref_key:
+            user_preferences[user_id][pref_key].add(video_id)
     if history_rows:
         history_table = f"{project_id}.{DATASET}.session_history"
         errors = bq.insert_rows_json(history_table, history_rows)
@@ -103,7 +90,6 @@ def sync_session_to_bigquery(
         _merge_user_preferences(bq, users_table, uid, prefs)
 
     logger.info(f"BQ sync complete for session {session_id}")
-
 
 def _merge_user_preferences(
     bq: bigquery.Client,
@@ -131,11 +117,10 @@ def _merge_user_preferences(
             FROM `{table_id}` WHERE user_id = @user_id
             """
             fetch_result = list(bq.query(fetch_query, job_config=check_config).result())[0]
-            merged_liked    = list(set((fetch_result.liked_songs or []) + liked))
+            merged_liked = list(set((fetch_result.liked_songs or []) + liked))
             merged_disliked = list(set((fetch_result.disliked_songs or []) + disliked))
             merged_skipped  = list(set((fetch_result.skipped_songs or []) + skipped))
             merged_replayed = list(set((fetch_result.replayed_songs or []) + replayed))
-
             update_query = f"""
             UPDATE `{table_id}` SET
                 liked_songs    = @liked,

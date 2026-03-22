@@ -24,7 +24,7 @@ class TestCombineGcsFilesSafe:
         mock_client.bucket.return_value = mock_bucket
 
         with patch("backend.pipelines.api.gcs_utils.storage.Client", return_value=mock_client):
-            combine_gcs_files_safe("my-bucket", "prefix", "Final_Output/out.csv")
+            combine_gcs_files_safe("my-bucket", "prefix", "sessions/test_session/combined/valid/out.csv")
 
         uploaded = mock_output_blob.upload_from_string.call_args[0][0]
         assert "col_a,col_b" in uploaded
@@ -48,7 +48,7 @@ class TestCombineGcsFilesSafe:
         blob_json.download_as_text.assert_not_called()
 
     def test_skips_final_output_files(self):
-        blob_skip = _make_blob("Final_Output/already_combined.csv", "h\nrow")
+        blob_skip = _make_blob("sessions/test_session/combined/valid/already_combined.csv", "h\nrow")
         blob_ok   = _make_blob("prefix/valid.csv", "h\nrow2")
 
         mock_bucket = MagicMock()

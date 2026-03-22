@@ -10,7 +10,7 @@ def combine_gcs_files_safe(bucket_name: str,input_prefix: str,output_file: str,r
     bucket = client.bucket(bucket_name)
     for attempt in range(retries):
         try:
-            blobs = [ b for b in bucket.list_blobs(prefix=input_prefix) if b.name.endswith(".csv") and "Final_Output" not in b.name]
+            blobs = [ b for b in bucket.list_blobs(prefix=input_prefix) if b.name.endswith(".csv") and "/combined/" not in b.name]
             if not blobs:
                 logger.warning(f"No CSV files found under gs://{bucket_name}/{input_prefix}")
                 return

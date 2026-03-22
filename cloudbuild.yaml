@@ -23,7 +23,7 @@ steps:
         "1",
         "--max-instances",
         "6",
-        "--cpu-throttling=false",
+        "--no-cpu-throttling",
         "--set-secrets",
         "auth_provider_x509_cert_url=auth_provider_x509_cert_url:latest,AUTH_URI=AUTH_URI:latest,CLIENT_ID=CLIENT_ID:latest,CLIENT_SECRET=CLIENT_SECRET:latest,FIRESTORE_DATABASE=FIRESTORE_DATABASE:latest,PROJECT_ID=PROJECT_ID:latest,REDIRECT_URIS=REDIRECT_URIS:latest,TOKEN_URI=TOKEN_URI:latest,BUCKET=BUCKET:latest,SERVICE_ACCOUNT_EMAIL=SERVICE_ACCOUNT_EMAIL:latest,SLACK_WEBHOOK_URL=SLACK_WEBHOOK_URL:latest,SESSION_READY_TOPIC=SESSION_READY_TOPIC:latest"
       ]

@@ -134,13 +134,23 @@ class TestAlertManagerPaths:
 
     @patch("backend.pipelines.api.alert_manager.storage.Client")
     def test_custom_paths_override_defaults(self, mock_storage):
+        import json as _json
+
         mock_bucket = MagicMock()
         mock_storage.return_value.bucket.return_value = mock_bucket
 
-        mock_blob = MagicMock()
-        mock_blob.exists.return_value = True
-        mock_blob.download_as_text.return_value = "header\nrow1\n"
-        mock_bucket.blob.return_value = mock_blob
+        bias_json = _json.dumps({"slices": {"genre": {"counts": {"Pop": 10}}}})
+
+        def blob_side_effect(path):
+            blob = MagicMock()
+            blob.exists.return_value = True
+            if "bias" in path:
+                blob.download_as_text.return_value = bias_json
+            else:
+                blob.download_as_text.return_value = "header\nrow1\n"
+            return blob
+
+        mock_bucket.blob.side_effect = blob_side_effect
 
         from backend.pipelines.api.alert_manager import compute_session_anomalies
         result = compute_session_anomalies(

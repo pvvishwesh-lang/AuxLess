@@ -10,6 +10,7 @@ pandas
 flask
 gunicorn
 fsspec
+google-api-python-client
 gcsfs
 scipy
 numpy

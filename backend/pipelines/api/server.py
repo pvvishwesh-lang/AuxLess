@@ -19,7 +19,8 @@ if not logger.handlers:
     logger.addHandler(handler)
 else:
     for h in logger.handlers:
-        h.setStream(sys.stderr)
+        if hasattr(h, 'setStream'):
+            h.setStream(sys.stderr)
 
 app = Flask(__name__)
 

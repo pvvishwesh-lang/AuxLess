@@ -22,6 +22,7 @@ def sync_session_to_bigquery(
 ):
     db = firestore.Client(project=project_id, database=database_id)
     bq = bigquery.Client(project=project_id)
+
     tracks_ref = (
         db.collection("sessions")
         .document(session_id)
@@ -34,8 +35,10 @@ def sync_session_to_bigquery(
         return
 
     logger.info(f"Syncing {len(track_docs)} tracks from session {session_id} to BigQuery")
+
     history_rows = []
     user_preferences = {}  
+
     if user_ids:
         for uid in user_ids:
             user_preferences[uid] = {
@@ -44,6 +47,7 @@ def sync_session_to_bigquery(
                 "skipped": set(),
                 "replayed": set(),
             }
+
     for doc in track_docs:
         data = doc.to_dict()
         video_id = data.get("video_id", doc.id)
@@ -70,6 +74,7 @@ def sync_session_to_bigquery(
                     "score_delta": WEIGHTS.get(action, 0.0),
                     "timestamp":   ts_str,
                 })
+
             action_to_pref = {
                 "like": "liked",
                 "dislike": "disliked",
@@ -77,10 +82,12 @@ def sync_session_to_bigquery(
                 "replay": "replayed",
             }
             pref_key = action_to_pref.get(action)
+
             for uid in user_preferences:
                 if pref_key:
                     user_preferences[uid].add(video_id) if False else None
                     user_preferences[uid][pref_key].add(video_id)
+
     if history_rows:
         history_table = f"{project_id}.{DATASET}.session_history"
         errors = bq.insert_rows_json(history_table, history_rows)
@@ -109,54 +116,65 @@ def _merge_user_preferences(
     skipped  = list(prefs.get("skipped", set()))
     replayed = list(prefs.get("replayed", set()))
 
-    query = f"""
-    MERGE `{table_id}` AS target
-    USING (
-        SELECT
-            @user_id AS user_id,
-            @liked AS liked,
-            @disliked AS disliked,
-            @skipped AS skipped,
-            @replayed AS replayed
-    ) AS source
-    ON target.user_id = source.user_id
-    WHEN MATCHED THEN UPDATE SET
-        liked_songs    = (
-            SELECT ARRAY_AGG(DISTINCT vid)
-            FROM UNNEST(ARRAY_CONCAT(IFNULL(target.liked_songs, []), source.liked)) AS vid
-        ),
-        disliked_songs = (
-            SELECT ARRAY_AGG(DISTINCT vid)
-            FROM UNNEST(ARRAY_CONCAT(IFNULL(target.disliked_songs, []), source.disliked)) AS vid
-        ),
-        skipped_songs  = (
-            SELECT ARRAY_AGG(DISTINCT vid)
-            FROM UNNEST(ARRAY_CONCAT(IFNULL(target.skipped_songs, []), source.skipped)) AS vid
-        ),
-        replayed_songs = (
-            SELECT ARRAY_AGG(DISTINCT vid)
-            FROM UNNEST(ARRAY_CONCAT(IFNULL(target.replayed_songs, []), source.replayed)) AS vid
-        ),
-        last_updated   = CURRENT_TIMESTAMP()
-    WHEN NOT MATCHED THEN INSERT (
-        user_id, liked_songs, disliked_songs, skipped_songs, replayed_songs, last_updated
-    ) VALUES (
-        source.user_id, source.liked, source.disliked, source.skipped, source.replayed, CURRENT_TIMESTAMP()
-    )
-    """
-
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("user_id", "STRING", user_id),
-            bigquery.ArrayQueryParameter("liked", "STRING", liked),
-            bigquery.ArrayQueryParameter("disliked", "STRING", disliked),
-            bigquery.ArrayQueryParameter("skipped", "STRING", skipped),
-            bigquery.ArrayQueryParameter("replayed", "STRING", replayed),
-        ]
-    )
-
     try:
-        bq.query(query, job_config=job_config).result()
-        logger.info(f"Merged preferences for user {user_id}")
+        check_query = f"SELECT user_id FROM `{table_id}` WHERE user_id = @user_id"
+        check_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("user_id", "STRING", user_id),
+            ]
+        )
+        rows = list(bq.query(check_query, job_config=check_config).result())
+
+        if rows:
+            fetch_query = f"""
+            SELECT liked_songs, disliked_songs, skipped_songs, replayed_songs
+            FROM `{table_id}` WHERE user_id = @user_id
+            """
+            fetch_result = list(bq.query(fetch_query, job_config=check_config).result())[0]
+            merged_liked    = list(set((fetch_result.liked_songs or []) + liked))
+            merged_disliked = list(set((fetch_result.disliked_songs or []) + disliked))
+            merged_skipped  = list(set((fetch_result.skipped_songs or []) + skipped))
+            merged_replayed = list(set((fetch_result.replayed_songs or []) + replayed))
+
+            update_query = f"""
+            UPDATE `{table_id}` SET
+                liked_songs    = @liked,
+                disliked_songs = @disliked,
+                skipped_songs  = @skipped,
+                replayed_songs = @replayed,
+                last_updated   = CURRENT_TIMESTAMP()
+            WHERE user_id = @user_id
+            """
+            update_config = bigquery.QueryJobConfig(
+                query_parameters=[
+                    bigquery.ScalarQueryParameter("user_id", "STRING", user_id),
+                    bigquery.ArrayQueryParameter("liked", "STRING", merged_liked),
+                    bigquery.ArrayQueryParameter("disliked", "STRING", merged_disliked),
+                    bigquery.ArrayQueryParameter("skipped", "STRING", merged_skipped),
+                    bigquery.ArrayQueryParameter("replayed", "STRING", merged_replayed),
+                ]
+            )
+            bq.query(update_query, job_config=update_config).result()
+            logger.info(f"Updated preferences for user {user_id}")
+
+        else:
+            insert_query = f"""
+            INSERT INTO `{table_id}`
+                (user_id, liked_songs, disliked_songs, skipped_songs, replayed_songs, last_updated)
+            VALUES
+                (@user_id, @liked, @disliked, @skipped, @replayed, CURRENT_TIMESTAMP())
+            """
+            insert_config = bigquery.QueryJobConfig(
+                query_parameters=[
+                    bigquery.ScalarQueryParameter("user_id", "STRING", user_id),
+                    bigquery.ArrayQueryParameter("liked", "STRING", liked),
+                    bigquery.ArrayQueryParameter("disliked", "STRING", disliked),
+                    bigquery.ArrayQueryParameter("skipped", "STRING", skipped),
+                    bigquery.ArrayQueryParameter("replayed", "STRING", replayed),
+                ]
+            )
+            bq.query(insert_query, job_config=insert_config).result()
+            logger.info(f"Inserted preferences for new user {user_id}")
+
     except Exception as e:
         logger.error(f"Failed to merge preferences for user {user_id}: {e}")

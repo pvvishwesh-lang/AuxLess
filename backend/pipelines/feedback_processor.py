@@ -2,6 +2,7 @@ import json
 import logging
 import apache_beam as beam
 from google.cloud import firestore
+from google.cloud.firestore_v1 import Increment, SERVER_TIMESTAMP
 
 logger = logging.getLogger(__name__)
 WEIGHTS = {
@@ -70,13 +71,13 @@ class UpdateFirestoreFn(beam.DoFn):
         )
         count_field = f"{action}_count"
         track_ref.set(
-            {
-                "score":       firestore.transforms.INCREMENT(score_delta),
-                count_field:   firestore.transforms.INCREMENT(1),
-                "last_updated": firestore.SERVER_TIMESTAMP,
-                "video_id":    video_id,
-            },
-            merge=True  
+        {
+            "score":       Increment(score_delta),
+            count_field:   Increment(1),
+            "last_updated": SERVER_TIMESTAMP,
+            "video_id":    video_id,
+        },
+        merge=True  
         )
 
         logger.info(

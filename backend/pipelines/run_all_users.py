@@ -35,7 +35,7 @@ def write_json_to_gcs(bucket_name: str, blob_path: str, data: dict) -> str:
 
 
 def run_for_session(session_id: str):
-    bucket      = os.environ["BUCKET"]
+    bucket = os.environ["BUCKET"]
     project_id  = os.environ["PROJECT_ID"]
     database_id = os.environ["FIRESTORE_DATABASE"]
 
@@ -52,8 +52,16 @@ def run_for_session(session_id: str):
 
     logger.info(f"Starting pipelines for {len(users)} users in session {session_id}")
 
+    session_root   = f"sessions/{session_id}"
     prefix_valid   = f"user_outputs/{session_id}/valid"
     prefix_invalid = f"user_outputs/{session_id}/invalid"
+
+    combined_valid_path   = f"{session_root}/combined/valid/{session_id}_combined_valid.csv"
+    combined_invalid_path = f"{session_root}/combined/invalid/{session_id}_combined_invalid.csv"
+    bias_metrics_path     = f"{session_root}/bias_metrics/{session_id}_bias_metrics.json"
+    mitigation_csv_path   = f"{session_root}/bias_mitigation/{session_id}_mitigated.csv"
+    mitigation_rpt_path   = f"{session_root}/bias_mitigation/{session_id}_mitigation_report.json"
+    schema_report_path    = f"{session_root}/schema_report/{session_id}_schema_report.json"
 
     jobs = []
     for user_id, refresh_token in users:
@@ -84,20 +92,28 @@ def run_for_session(session_id: str):
         except Exception as e:
             logger.error(f"Error waiting for Dataflow job: {e}")
 
-    final_csv_path        = None
-    combined_valid_path   = f"Final_Output/{session_id}_combined_valid.csv"
-    combined_invalid_path = f"Final_Output/{session_id}_combined_invalid.csv"
+    final_csv_path = None
 
     try:
         logger.info("Combining valid output files...")
-        combine_gcs_files_safe(bucket_name=bucket, input_prefix=prefix_valid,   output_file=combined_valid_path)
+        combine_gcs_files_safe(
+            bucket_name=bucket,
+            input_prefix=prefix_valid,
+            output_file=combined_valid_path
+        )
         logger.info("Combining invalid output files...")
-        combine_gcs_files_safe(bucket_name=bucket, input_prefix=prefix_invalid, output_file=combined_invalid_path)
+        combine_gcs_files_safe(
+            bucket_name=bucket,
+            input_prefix=prefix_invalid,
+            output_file=combined_invalid_path
+        )
 
         client = storage.Client()
         blob   = client.bucket(bucket).blob(combined_valid_path)
         if not blob.exists():
-            raise RuntimeError(f"Combined valid file not found: gs://{bucket}/{combined_valid_path}")
+            raise RuntimeError(
+                f"Combined valid file not found: gs://{bucket}/{combined_valid_path}"
+            )
 
         final_csv_path = f"gs://{bucket}/{combined_valid_path}"
         logger.info(f"Combined valid file verified at {final_csv_path}")
@@ -117,12 +133,10 @@ def run_for_session(session_id: str):
 
     try:
         logger.info("Computing bias metrics...")
-        bias_summary = compute_bias_metrics(final_csv_path, slice_cols=["genre", "country"])
-        write_json_to_gcs(
-            bucket,
-            f"Final_Output/{session_id}_bias_metrics/{session_id}_bias_metrics.json",
-            bias_summary
+        bias_summary = compute_bias_metrics(
+            final_csv_path, slice_cols=["genre", "country"]
         )
+        write_json_to_gcs(bucket, bias_metrics_path, bias_summary)
         logger.info("Bias metrics saved.")
     except Exception as e:
         logger.error(f"Bias metrics failed: {e}")
@@ -132,7 +146,10 @@ def run_for_session(session_id: str):
         mitigation_report = run_bias_mitigation(
             bucket_name=bucket,
             session_id=session_id,
-            slice_cols=["genre", "country"]
+            slice_cols=["genre", "country"],
+            input_path=combined_valid_path,
+            output_csv_path=mitigation_csv_path,
+            output_report_path=mitigation_rpt_path
         )
         logger.info(f"Mitigation complete. Report: {mitigation_report}")
     except Exception as e:
@@ -140,19 +157,28 @@ def run_for_session(session_id: str):
 
     try:
         logger.info("Running schema validation...")
-        schema_report = run_schema_validation(bucket, session_id)
-        write_json_to_gcs(
-            bucket,
-            f"Final_Output/{session_id}_schema_report/{session_id}_schema_report.json",
-            schema_report
+        schema_report = run_schema_validation(
+            bucket_name=bucket,
+            session_id=session_id,
+            input_path=combined_valid_path
         )
-        logger.info(f"Schema valid: {schema_report['schema_valid']}, violations: {len(schema_report['schema_violations'])}")
+        write_json_to_gcs(bucket, schema_report_path, schema_report)
+        logger.info(
+            f"Schema valid: {schema_report['schema_valid']}, "
+            f"violations: {len(schema_report['schema_violations'])}"
+        )
     except Exception as e:
         logger.error(f"Schema validation failed: {e}")
 
     try:
         logger.info("Running session anomaly checks...")
-        run_anomaly_checks_and_alert(bucket, session_id)
+        run_anomaly_checks_and_alert(
+            bucket_name=bucket,
+            session_id=session_id,
+            valid_path=combined_valid_path,
+            invalid_path=combined_invalid_path,
+            bias_metrics_path=bias_metrics_path
+        )
     except Exception as e:
         logger.error(f"Anomaly alert failed: {e}")
 

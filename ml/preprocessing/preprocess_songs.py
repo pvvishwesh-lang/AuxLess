@@ -50,17 +50,22 @@ def preprocess_songs(df: pd.DataFrame) -> pd.DataFrame:
     df = df.drop_duplicates(subset=["video_id"])
     logger.info(f"Deduplication: {before} → {len(df)} songs")
 
-    # 2. fill missing values
+    # 2. early return if empty after dedup
+    if df.empty:
+        logger.warning("DataFrame is empty after deduplication. Returning empty.")
+        return df
+
+    # 3. fill missing values
     df["genre"]           = df["genre"].fillna("unknown")
     df["country"]         = df["country"].fillna("unknown")
     df["artist_name"]     = df["artist_name"].fillna("unknown")
     df["collection_name"] = df["collection_name"].fillna("unknown")
 
-    # 3. clean text columns
+    # 4. clean text columns
     for col in ["track_title", "artist_name", "genre", "collection_name", "country"]:
         df[col] = df[col].apply(clean_text)
 
-    # 4. convert numeric columns safely
+    # 5. convert numeric columns safely
     numeric_cols = [
         "trackTimeMillis", "trackTimeSeconds",
         "view_count", "like_count", "comment_count",
@@ -69,10 +74,10 @@ def preprocess_songs(df: pd.DataFrame) -> pd.DataFrame:
     for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-    # 5. duration in seconds (more intuitive for ML)
+    # 6. duration in seconds
     df["duration_sec"] = df["trackTimeMillis"] / 1000
 
-    # 6. recompute ratios if missing or zero (safety layer)
+    # 7. recompute ratios if missing or zero
     df["like_to_view_ratio"] = np.where(
         df["like_to_view_ratio"] == 0,
         df["like_count"] / df["view_count"].replace(0, 1),
@@ -84,7 +89,7 @@ def preprocess_songs(df: pd.DataFrame) -> pd.DataFrame:
         df["comment_to_view_ratio"]
     )
 
-    # 7. popularity score (not in pipeline output — computed here)
+    # 8. popularity score
     pop_cols = ["view_count", "like_count", "comment_count"]
     scaler   = MinMaxScaler()
     scaled   = pd.DataFrame(
@@ -129,7 +134,6 @@ if __name__ == "__main__":
     import os
     import sys
 
-    # for local testing only — reads from local Pipeline_output.csv
     LOCAL_INPUT  = "data/playlists/Pipeline_output.csv"
     LOCAL_OUTPUT = "data/preprocessed_songs.csv"
 

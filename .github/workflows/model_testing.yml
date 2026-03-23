@@ -54,6 +54,7 @@ jobs:
           pip install pytest pytest-cov
           pip install google-cloud-bigquery google-cloud-firestore google-cloud-storage
           pip install functions-framework
+          pip install sentence-transformers==3.0.0
 
       - name: Create package __init__.py files
         run: |

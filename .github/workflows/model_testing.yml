@@ -57,6 +57,7 @@ jobs:
 
       - name: Create package __init__.py files
         run: |
+          mkdir -p ml/recommendation/cf
           touch ml/__init__.py
           touch ml/preprocessing/__init__.py
           touch ml/feature_engineering/__init__.py

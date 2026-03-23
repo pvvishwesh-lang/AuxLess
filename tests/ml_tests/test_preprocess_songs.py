@@ -13,6 +13,7 @@ import os
 import pytest
 import numpy as np
 import pandas as pd
+import pandas.api.types as ptypes
 from unittest.mock import patch, MagicMock
 
 
@@ -247,6 +248,7 @@ class TestPreprocessSongs:
     def test_numeric_cols_coerced(self):
         from ml.preprocessing.preprocess_songs import preprocess_songs
         df = make_songs_df(5)
+        df["view_count"] = df["view_count"].astype(object)
         df["view_count"] = ["1000", "bad", None, "500", "200"]
         result = preprocess_songs(df)
         assert pd.api.types.is_numeric_dtype(result["view_count"])
@@ -321,7 +323,7 @@ class TestPreprocessSongs:
         df = make_songs_df()
         result = preprocess_songs(df)
         for col in ["track_title", "artist_name", "genre", "collection_name", "country"]:
-            assert result[col].dtype == object
+            assert ptypes.is_string_dtype(result[col]), f"{col} dtype is {result[col].dtype}"
 
     def test_single_row_df(self):
         from ml.preprocessing.preprocess_songs import preprocess_songs
@@ -400,6 +402,7 @@ class TestPreprocessSongs:
     def test_string_view_count_coerced(self):
         from ml.preprocessing.preprocess_songs import preprocess_songs
         df = make_songs_df(3)
+        df["view_count"] = df["view_count"].astype(object)
         df["view_count"] = ["1000", "2000", "3000"]
         result = preprocess_songs(df)
         assert pd.api.types.is_numeric_dtype(result["view_count"])
@@ -407,6 +410,7 @@ class TestPreprocessSongs:
     def test_non_numeric_view_count_becomes_zero(self):
         from ml.preprocessing.preprocess_songs import preprocess_songs
         df = make_songs_df(3)
+        df["view_count"] = df["view_count"].astype(object)
         df.loc[0, "view_count"] = "not_a_number"
         result = preprocess_songs(df)
         assert result.loc[0, "view_count"] == 0

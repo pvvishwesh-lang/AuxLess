@@ -68,18 +68,32 @@ def _validate_schema(df: pd.DataFrame) -> list:
             if "min" in rules:
                 below = int((df[col] < rules["min"]).sum())
                 if below:
-                    violations.append({"column": col, "issue": f"below_min_{rules['min']}", "count": below})
+                    violations.append({
+                        "column": col,
+                        "issue":  f"below_min_{rules['min']}",
+                        "count":  below
+                    })
             if "max" in rules:
                 above = int((df[col] > rules["max"]).sum())
                 if above:
-                    violations.append({"column": col, "issue": f"above_max_{rules['max']}", "count": above})
+                    violations.append({
+                        "column": col,
+                        "issue":  f"above_max_{rules['max']}",
+                        "count":  above
+                    })
     return violations
 
 
-def run_schema_validation(bucket_name: str, session_id: str) -> dict:
-    blob_path = f"Final_Output/{session_id}_combined_valid.csv"
-    logger.info(f"Loading gs://{bucket_name}/{blob_path} for schema validation")
-    df = _load_df(bucket_name, blob_path)
+def run_schema_validation(
+    bucket_name: str,
+    session_id: str,
+    input_path: str = None
+) -> dict:
+    if input_path is None:
+        input_path = f"sessions/{session_id}/combined/valid/{session_id}_combined_valid.csv"
+
+    logger.info(f"Loading gs://{bucket_name}/{input_path} for schema validation")
+    df = _load_df(bucket_name, input_path)
 
     stats      = _generate_statistics(df)
     violations = _validate_schema(df)
@@ -92,5 +106,8 @@ def run_schema_validation(bucket_name: str, session_id: str) -> dict:
         "schema_violations": violations,
         "statistics":        stats,
     }
-    logger.info(f"Schema validation done. Valid: {result['schema_valid']}, Violations: {len(violations)}")
+    logger.info(
+        f"Schema validation done. Valid: {result['schema_valid']}, "
+        f"Violations: {len(violations)}"
+    )
     return result

@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 UNDERREPRESENTED_THRESHOLD = 0.05
 DOMINANCE_THRESHOLD        = 0.60
 
-
 def _load_df(bucket_name: str, blob_path: str) -> pd.DataFrame:
     client  = storage.Client()
     content = client.bucket(bucket_name).blob(blob_path).download_as_text()
@@ -120,10 +119,22 @@ def compute_mitigation_report(
     return report
 
 
-def run_bias_mitigation(bucket_name: str, session_id: str, slice_cols: list) -> dict:
-    input_path  = f"Final_Output/{session_id}_combined_valid.csv"
-    output_path = f"Final_Output/{session_id}_mitigated.csv"
-    report_path = f"Final_Output/{session_id}_mitigation_report.json"
+def run_bias_mitigation(
+    bucket_name: str,
+    session_id: str,
+    slice_cols: list,
+    input_path: str = None,
+    output_csv_path: str = None,
+    output_report_path: str = None
+) -> dict:
+    session_root = f"sessions/{session_id}"
+
+    if input_path is None:
+        input_path = f"{session_root}/combined/valid/{session_id}_combined_valid.csv"
+    if output_csv_path is None:
+        output_csv_path = f"{session_root}/bias_mitigation/{session_id}_mitigated.csv"
+    if output_report_path is None:
+        output_report_path = f"{session_root}/bias_mitigation/{session_id}_mitigation_report.json"
 
     logger.info(f"Loading data for bias mitigation: gs://{bucket_name}/{input_path}")
     df_original = _load_df(bucket_name, input_path)
@@ -137,12 +148,12 @@ def run_bias_mitigation(bucket_name: str, session_id: str, slice_cols: list) -> 
         df = downsample_dominant(df, col)
 
     report = compute_mitigation_report(df_original, df, slice_cols)
-    _save_df(df, bucket_name, output_path)
+    _save_df(df, bucket_name, output_csv_path)
 
     client = storage.Client()
-    client.bucket(bucket_name).blob(report_path).upload_from_string(
+    client.bucket(bucket_name).blob(output_report_path).upload_from_string(
         json.dumps(report, indent=2),
         content_type="application/json"
     )
-    logger.info(f"Mitigation report saved to gs://{bucket_name}/{report_path}")
+    logger.info(f"Mitigation report saved to gs://{bucket_name}/{output_report_path}")
     return report

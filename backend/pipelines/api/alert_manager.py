@@ -18,16 +18,32 @@ def _count_data_rows(bucket: object, blob_path: str) -> int:
     if not blob.exists():
         return 0
     lines = blob.download_as_text().splitlines()
-    return max(0, len(lines) - 1) 
+    return max(0, len(lines) - 1)
 
 
-def compute_session_anomalies(bucket_name: str, session_id: str) -> dict:
-    client  = storage.Client()
-    bucket  = client.bucket(bucket_name)
+def compute_session_anomalies(
+    bucket_name: str,
+    session_id: str,
+    valid_path: str = None,
+    invalid_path: str = None,
+    bias_metrics_path: str = None
+) -> dict:
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+
+    session_root = f"sessions/{session_id}"
+
+    if valid_path is None:
+        valid_path = f"{session_root}/combined/valid/{session_id}_combined_valid.csv"
+    if invalid_path is None:
+        invalid_path = f"{session_root}/combined/invalid/{session_id}_combined_invalid.csv"
+    if bias_metrics_path is None:
+        bias_metrics_path = f"{session_root}/bias_metrics/{session_id}_bias_metrics.json"
+
     anomalies = {}
 
-    valid_count   = _count_data_rows(bucket, f"Final_Output/{session_id}_combined_valid.csv")
-    invalid_count = _count_data_rows(bucket, f"Final_Output/{session_id}_combined_invalid.csv")
+    valid_count   = _count_data_rows(bucket, valid_path)
+    invalid_count = _count_data_rows(bucket, invalid_path)
     total = valid_count + invalid_count
 
     if total > 0:
@@ -39,7 +55,7 @@ def compute_session_anomalies(bucket_name: str, session_id: str) -> dict:
                 "message":   f"{invalid_pct:.1f}% of records failed validation ({invalid_count}/{total})"
             }
 
-    bias_blob = bucket.blob(f"Final_Output/{session_id}_bias_metrics/{session_id}_bias_metrics.json")
+    bias_blob = bucket.blob(bias_metrics_path)
     if bias_blob.exists():
         bias = json.loads(bias_blob.download_as_text())
         genre_data = bias.get("slices", {}).get("genre", {})
@@ -94,8 +110,20 @@ def send_slack_alert(report: dict):
         logger.error(f"Slack alert failed: {e}")
 
 
-def run_anomaly_checks_and_alert(bucket_name: str, session_id: str) -> dict:
-    report = compute_session_anomalies(bucket_name, session_id)
+def run_anomaly_checks_and_alert(
+    bucket_name: str,
+    session_id: str,
+    valid_path: str = None,
+    invalid_path: str = None,
+    bias_metrics_path: str = None
+) -> dict:
+    report = compute_session_anomalies(
+        bucket_name,
+        session_id,
+        valid_path=valid_path,
+        invalid_path=invalid_path,
+        bias_metrics_path=bias_metrics_path
+    )
     if report["triggered"]:
         logger.warning(f"Anomalies for {session_id}: {list(report['anomalies'].keys())}")
         send_slack_alert(report)

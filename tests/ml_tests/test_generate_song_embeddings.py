@@ -19,13 +19,14 @@ from unittest.mock import patch, MagicMock
 
 def make_songs_df(n=5, seed=0):
     np.random.seed(seed)
+    genres = ["pop", "rock", "jazz", "hip-hop", "classical"]
     return pd.DataFrame({
-        "video_id":        [f"vid_{i}" for i in range(n)],
-        "track_title":     [f"song {i}" for i in range(n)],
-        "artist_name":     [f"artist {i % 3}" for i in range(n)],
-        "genre":           ["pop", "rock", "jazz", "hip-hop", "classical"][:n],
-        "collection_name": [f"album {i}" for i in range(n)],
-        "duration_sec":    [200.0 + i * 10 for i in range(n)],
+        "video_id":         [f"vid_{i}" for i in range(n)],
+        "track_title":      [f"song {i}" for i in range(n)],
+        "artist_name":      [f"artist {i % 3}" for i in range(n)],
+        "genre":            [genres[i % len(genres)] for i in range(n)],
+        "collection_name":  [f"album {i}" for i in range(n)],
+        "duration_sec":     [200.0 + i * 10 for i in range(n)],
         "popularity_score": [round(0.1 * i, 2) for i in range(n)],
     })
 
@@ -147,7 +148,7 @@ class TestGenerateEmbeddings:
         from ml.feature_engineering.generate_song_embeddings import generate_embeddings
         df     = make_songs_df(5)
         result = generate_embeddings(df)
-        # last 2 dims are MinMaxScaled → [0, 1]
+        # last 2 dims are MinMaxScaled -> [0, 1]
         numeric_part = result[:, 384:]
         assert (numeric_part >= 0.0).all()
         assert (numeric_part <= 1.0).all()
@@ -298,7 +299,7 @@ class TestGenerateEmbeddingsForSession:
 
     @patch("ml.feature_engineering.generate_song_embeddings._read_csv_from_gcs")
     @patch("ml.feature_engineering.generate_song_embeddings.get_client")
-    @patch("ml.feature_engineering.generate_song_embeddings._get_existing_ids")  # ← fixed
+    @patch("ml.feature_engineering.generate_song_embeddings._get_existing_ids")
     @patch("ml.feature_engineering.generate_song_embeddings.load_embeddings")
     def test_returns_int(
         self, mock_load, mock_existing, mock_client, mock_read
@@ -313,7 +314,7 @@ class TestGenerateEmbeddingsForSession:
 
     @patch("ml.feature_engineering.generate_song_embeddings._read_csv_from_gcs")
     @patch("ml.feature_engineering.generate_song_embeddings.get_client")
-    @patch("ml.feature_engineering.generate_song_embeddings._get_existing_ids")  # ← fixed
+    @patch("ml.feature_engineering.generate_song_embeddings._get_existing_ids")
     @patch("ml.feature_engineering.generate_song_embeddings.load_embeddings")
     def test_returns_zero_on_empty_df(
         self, mock_load, mock_existing, mock_client, mock_read
@@ -327,7 +328,7 @@ class TestGenerateEmbeddingsForSession:
 
     @patch("ml.feature_engineering.generate_song_embeddings._read_csv_from_gcs")
     @patch("ml.feature_engineering.generate_song_embeddings.get_client")
-    @patch("ml.feature_engineering.generate_song_embeddings._get_existing_ids")  # ← fixed
+    @patch("ml.feature_engineering.generate_song_embeddings._get_existing_ids")
     @patch("ml.feature_engineering.generate_song_embeddings.load_embeddings")
     def test_returns_zero_when_all_existing(
         self, mock_load, mock_existing, mock_client, mock_read
@@ -343,7 +344,7 @@ class TestGenerateEmbeddingsForSession:
 
     @patch("ml.feature_engineering.generate_song_embeddings._read_csv_from_gcs")
     @patch("ml.feature_engineering.generate_song_embeddings.get_client")
-    @patch("ml.feature_engineering.generate_song_embeddings._get_existing_ids")  # ← fixed
+    @patch("ml.feature_engineering.generate_song_embeddings._get_existing_ids")
     @patch("ml.feature_engineering.generate_song_embeddings.load_embeddings")
     def test_load_embeddings_called_for_new_songs(
         self, mock_load, mock_existing, mock_client, mock_read
@@ -358,7 +359,7 @@ class TestGenerateEmbeddingsForSession:
 
     @patch("ml.feature_engineering.generate_song_embeddings._read_csv_from_gcs")
     @patch("ml.feature_engineering.generate_song_embeddings.get_client")
-    @patch("ml.feature_engineering.generate_song_embeddings._get_existing_ids")  # ← fixed
+    @patch("ml.feature_engineering.generate_song_embeddings._get_existing_ids")
     @patch("ml.feature_engineering.generate_song_embeddings.load_embeddings")
     def test_load_embeddings_not_called_when_all_existing(
         self, mock_load, mock_existing, mock_client, mock_read
@@ -374,7 +375,7 @@ class TestGenerateEmbeddingsForSession:
 
     @patch("ml.feature_engineering.generate_song_embeddings._read_csv_from_gcs")
     @patch("ml.feature_engineering.generate_song_embeddings.get_client")
-    @patch("ml.feature_engineering.generate_song_embeddings._get_existing_ids")  # ← fixed
+    @patch("ml.feature_engineering.generate_song_embeddings._get_existing_ids")
     @patch("ml.feature_engineering.generate_song_embeddings.load_embeddings")
     def test_returns_count_of_new_songs(
         self, mock_load, mock_existing, mock_client, mock_read

@@ -1,0 +1,62 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.env
+.venv
+env/
+venv/
+ENV/
+
+# ── ML specific ───────────────────────────────────────────────────────────────
+ml/gru/gru_model.pt
+ml/preprocessing/data/
+*.pt
+*.pkl
+*.h5
+*.ckpt
+
+# ── GCP credentials ───────────────────────────────────────────────────────────
+service_account*.json
+application_default_credentials.json
+*credentials*.json
+
+# ── Environment variables ─────────────────────────────────────────────────────
+.env
+.env.local
+.env.production
+*.env
+
+# ── Mac system files ──────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.ipynb_checkpoints/
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/

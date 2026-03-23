@@ -1,44 +1,83 @@
-# This is a basic workflow to help you get started with Actions
+name: ML Model Tests
 
-name: Test ML Model
-
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
   push:
-    branches: [ "main" ]
+    branches: [main, develop]
+    paths:
+      - "ml/**"
+      - "tests/ml_tests/**"
+      - ".github/workflows/model_testing.yml"
   pull_request:
-    branches: [ "main" ]
-
-  # Allows you to run this workflow manually from the Actions tab
+    branches: [main, develop]
+    paths:
+      - "ml/**"
+      - "tests/ml_tests/**"
+      - ".github/workflows/model_testing.yml"
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
   test:
-    # The type of runner that the job will run on
+    name: ML Pipeline Tests
     runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
+    env:
+      # GCP config (mocked values for CI — all GCP calls are mocked in tests)
+      PROJECT_ID:          music-recommender-490319
+      FIRESTORE_DATABASE:  auxless
+      BUCKET:              youtube-pipeline-staging-bucket
+      GRU_MODEL_PATH:      ml/gru/gru_model.pt
+
+      # Flag used by @pytest.mark.skipif to skip live GCP tests in CI
+      CI: "true"
+
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # Runs a set of commands using the runners shell
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with: 
-          python-version: '3.10'
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-      - name: Install Dependencies
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-ml-${{ hashFiles('tests/ml_tests/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-ml-
+
+      - name: Install ML test dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r tests/ml_tests/requirements.txt
-          pip install pytest
+          pip install pytest pytest-cov
+          pip install google-cloud-bigquery google-cloud-firestore google-cloud-storage
+          pip install functions-framework
 
-      - name: Run tests
-        run: pytest tests/ml_tests/test_model.py
-      
-      
+      - name: Create package __init__.py files
+        run: |
+          touch ml/__init__.py
+          touch ml/preprocessing/__init__.py
+          touch ml/feature_engineering/__init__.py
+          touch ml/recommendation/__init__.py
+          touch ml/recommendation/cf/__init__.py
+          touch ml/gru/__init__.py
+
+      - name: Run ML tests
+        run: |
+          pytest tests/ml_tests/ \
+            -v \
+            --tb=short \
+            --ignore=tests/ml_tests/test_model.py \
+            --cov=ml \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage_ml.xml \
+            --cov-fail-under=60
+
+      - name: Upload ML coverage report
+        uses: codecov/codecov-action@v4
+        with:
+          file: coverage_ml.xml
+          flags: ml
+          fail_ci_if_error: false

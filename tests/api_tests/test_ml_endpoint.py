@@ -11,12 +11,22 @@ Covers:
   - background thread calls _run_ml_session with correct session_id
 
 Follows the same pattern as test_server.py.
+
+NOTE: All /ml endpoint tests are skipped until the /ml route and
+_run_ml_session_safe are uncommented in server.py.
+Re-enable by removing the @pytest.mark.skip decorators below.
 """
 
 import base64
 import json
 import pytest
 from unittest.mock import patch, MagicMock
+
+# Skip reason used across all classes
+ML_SKIP_REASON = (
+    "Skipped — /ml endpoint is commented out in server.py. "
+    "Re-enable when ML deployment is ready."
+)
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -49,6 +59,7 @@ def _make_pubsub_envelope(session_id: str) -> dict:
 
 # ── Valid request tests ───────────────────────────────────────────────────────
 
+@pytest.mark.skip(reason=ML_SKIP_REASON)
 class TestMlEndpointValid:
 
     def test_returns_202_for_valid_message(self, client):
@@ -118,11 +129,12 @@ class TestMlEndpointValid:
                 mock_thread.return_value.start = MagicMock()
                 res = client.post("/ml", json=payload)
         assert res.status_code == 202
-        mock_run.assert_not_called()   # not called directly, only via thread
+        mock_run.assert_not_called()
 
 
 # ── Invalid request tests ─────────────────────────────────────────────────────
 
+@pytest.mark.skip(reason=ML_SKIP_REASON)
 class TestMlEndpointInvalid:
 
     def test_missing_body_returns_400(self, client):
@@ -166,7 +178,6 @@ class TestMlEndpointIsolation:
         assert res.data == b"OK"
 
     def test_batch_endpoint_still_works(self, client):
-        # batch pipeline uses plain base64 string (not JSON payload)
         data    = base64.b64encode(b"sess_batch_123").decode("utf-8")
         payload = {"message": {"data": data}}
         with patch("backend.pipelines.api.server.threading.Thread") as mock_thread:
@@ -175,21 +186,22 @@ class TestMlEndpointIsolation:
         assert res.status_code == 202
 
     def test_ml_endpoint_does_not_trigger_batch_pipeline(self, client):
+        """While /ml is commented out, this just verifies POST /ml returns 404."""
         payload = _make_pubsub_envelope("sess_xyz")
         with patch("backend.pipelines.api.server._run_session_safe") as mock_batch:
-            with patch("backend.pipelines.api.server.threading.Thread") as mock_thread:
-                mock_thread.return_value.start = MagicMock()
-                client.post("/ml", json=payload)
+            res = client.post("/ml", json=payload)
+        # /ml is currently commented out so it returns 404
+        assert res.status_code == 404
         mock_batch.assert_not_called()
 
     def test_batch_endpoint_does_not_trigger_ml_pipeline(self, client):
+        """While /ml is commented out, just verify batch works independently."""
         data    = base64.b64encode(b"sess_batch_123").decode("utf-8")
         payload = {"message": {"data": data}}
-        with patch("backend.pipelines.api.server._run_ml_session_safe") as mock_ml:
-            with patch("backend.pipelines.api.server.threading.Thread") as mock_thread:
-                mock_thread.return_value.start = MagicMock()
-                client.post("/", json=payload)
-        mock_ml.assert_not_called()
+        with patch("backend.pipelines.api.server.threading.Thread") as mock_thread:
+            mock_thread.return_value.start = MagicMock()
+            res = client.post("/", json=payload)
+        assert res.status_code == 202
 
 
 if __name__ == "__main__":

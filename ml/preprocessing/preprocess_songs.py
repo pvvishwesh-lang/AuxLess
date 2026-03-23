@@ -45,9 +45,9 @@ def clean_text(text) -> str:
 
 # ── Core preprocessing ────────────────────────────────────────────────────────
 def preprocess_songs(df: pd.DataFrame) -> pd.DataFrame:
-    # 1. deduplicate
+    # 1. deduplicate and reset index to ensure alignment
     before = len(df)
-    df = df.drop_duplicates(subset=["video_id"])
+    df = df.drop_duplicates(subset=["video_id"]).reset_index(drop=True)
     logger.info(f"Deduplication: {before} → {len(df)} songs")
 
     # 2. early return if empty after dedup
@@ -94,7 +94,8 @@ def preprocess_songs(df: pd.DataFrame) -> pd.DataFrame:
     scaler   = MinMaxScaler()
     scaled   = pd.DataFrame(
         scaler.fit_transform(df[pop_cols]),
-        columns=pop_cols
+        columns=pop_cols,
+        index=df.index
     )
     df["popularity_score"] = (
         scaled["view_count"]    * 0.5 +
@@ -108,13 +109,6 @@ def preprocess_songs(df: pd.DataFrame) -> pd.DataFrame:
 
 # ── Session-scoped entry point ────────────────────────────────────────────────
 def preprocess_for_session(session_id: str, bucket: str) -> str:
-    """
-    Triggered after batch pipeline completes (publish_session_ready).
-    Reads the mitigated CSV from GCS, preprocesses it,
-    and saves the result back to GCS.
-
-    Returns the GCS path of the preprocessed CSV.
-    """
     input_path  = _mitigated_path(session_id)
     output_path = _preprocessed_path(session_id)
 

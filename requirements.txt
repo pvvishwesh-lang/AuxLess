@@ -22,3 +22,4 @@ sentence-transformers
 scikit-learn
 mlflow
 optuna
+functions_framework

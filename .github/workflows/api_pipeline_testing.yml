@@ -3,8 +3,16 @@ name: Run Tests
 on:
   push:
     branches: [main, develop]
+    paths:
+      - "backend/**"
+      - "tests/api_tests/**"
+      - ".github/workflows/api_pipeline_testing.yml"
   pull_request:
     branches: [main, develop]
+    paths:
+      - "backend/**"
+      - "tests/api_tests/**"
+      - ".github/workflows/api_pipeline_testing.yml"
 
 jobs:
   test:

@@ -186,13 +186,14 @@ class TestMlEndpointIsolation:
         assert res.status_code == 202
 
     def test_ml_endpoint_does_not_trigger_batch_pipeline(self, client):
-        """While /ml is commented out, this just verifies POST /ml returns 404."""
-        payload = _make_pubsub_envelope("sess_xyz")
-        with patch("backend.pipelines.api.server._run_session_safe") as mock_batch:
-            res = client.post("/ml", json=payload)
-        # /ml is currently commented out so it returns 404
-        assert res.status_code == 404
-        mock_batch.assert_not_called()
+      payload = _make_pubsub_envelope("sess_xyz")
+      with patch("backend.pipelines.api.server._run_session_safe") as mock_batch:
+          with patch("backend.pipelines.api.server.threading.Thread") as mock_thread:
+              mock_thread.return_value.start = MagicMock()
+              res = client.post("/ml", json=payload)
+
+      assert res.status_code == 202
+      mock_batch.assert_not_called()
 
     def test_batch_endpoint_does_not_trigger_ml_pipeline(self, client):
         """While /ml is commented out, just verify batch works independently."""

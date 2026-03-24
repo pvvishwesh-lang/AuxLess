@@ -7,8 +7,16 @@ on:
   # Triggers the workflow on push or pull request events but only for the "main" branch
   push:
     branches: [ "main" ]
+    paths:
+      - "frontend/**"
+      - "tests/frontend_tests/**"
+      - ".github/workflows/frontend_testing.yml"
   pull_request:
     branches: [ "main" ]
+    paths:
+      - "frontend/**"
+      - "tests/frontend_tests/**"
+      - ".github/workflows/frontend_testing.yml"
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:

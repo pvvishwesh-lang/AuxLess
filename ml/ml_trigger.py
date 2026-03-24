@@ -1,11 +1,8 @@
 """
 ML Trigger — entry point for the ML recommendation system.
 
-Triggered by server.py /ml endpoint when SESSION_READY_TOPIC fires.
-server.py receives the Pub/Sub message, decodes session_id,
-and calls _run_ml_session() directly in a background thread.
-
-Flow:
+Subscribes to SESSION_READY_TOPIC from Pub/Sub.
+When batch pipeline finishes, this fires and:
 1. Runs ML preprocessing (preprocess + embeddings)
 2. Initializes session (loads BigQuery + GRU)
 3. Generates first batch of 30 recommendations immediately
@@ -19,10 +16,14 @@ Queue strategy:
   User always has 20-30 songs ahead → zero waiting time
 """
 
+import base64
+import json
 import logging
 import os
 import threading
 import time
+
+import functions_framework
 
 from ml.preprocessing.preprocess_songs import preprocess_for_session
 from ml.feature_engineering.generate_song_embeddings import (
@@ -52,27 +53,18 @@ def _generate_and_write_batch(state, batch_number: int):
     """
     Runs one recommendation cycle and writes results to Firestore queue.
 
-    Each batch generates RECOMMENDATION_BATCH_SIZE songs.
-    Writes to: sessions/{session_id}/recommendations/{rank}
+    Each batch generates RECOMMENDATION_BATCH_SIZE (30) songs.
+    TOP_N and RECOMMENDATION_BATCH_SIZE are both 30 in config.py —
+    no override needed.
 
-    Batch 1: ranks 1-30
-    Batch 2: ranks 31-60
-    Batch 3: ranks 61-90
+    Writes to: sessions/{session_id}/recommendations/{rank}
     """
     logger.info(
         f"Generating batch {batch_number} "
         f"for session {state.session_id}..."
     )
 
-    # temporarily override TOP_N to match batch size
-    import ml.recommendation.config as cfg
-    original_top_n = cfg.TOP_N
-    cfg.TOP_N      = RECOMMENDATION_BATCH_SIZE
-
-    try:
-        top_song = recommend_next_song(state)
-    finally:
-        cfg.TOP_N = original_top_n
+    top_song = recommend_next_song(state)
 
     if not top_song:
         logger.warning(f"Batch {batch_number} returned no recommendations.")
@@ -228,11 +220,33 @@ def _run_ml_session(session_id: str):
         )
 
 
-# ── NOTE ──────────────────────────────────────────────────────────────────────
-# _run_ml_session is called by server.py /ml endpoint.
-# server.py receives the Pub/Sub push message, decodes session_id,
-# and calls _run_ml_session() in a background thread.
-# There is no Cloud Function entry point — Cloud Run handles it directly.
+# ── Cloud Function trigger ────────────────────────────────────────────────────
+@functions_framework.cloud_event
+def ml_session_trigger(cloud_event):
+    """
+    Cloud Function triggered by SESSION_READY_TOPIC Pub/Sub message.
+    Fires automatically when batch pipeline completes.
+
+    Pub/Sub message format:
+    { "session_id": "abc-123" }
+    """
+    try:
+        data       = cloud_event.data["message"]["data"]
+        payload    = json.loads(base64.b64decode(data).decode("utf-8"))
+        session_id = payload["session_id"]
+    except Exception as e:
+        logger.error(f"Failed to decode Pub/Sub message: {e}")
+        return
+
+    logger.info(f"ML trigger received session_id: {session_id}")
+
+    # run in background thread so Cloud Function returns immediately
+    thread = threading.Thread(
+        target=_run_ml_session,
+        args=(session_id,),
+        daemon=True
+    )
+    thread.start()
 
 
 # ── Local testing ─────────────────────────────────────────────────────────────

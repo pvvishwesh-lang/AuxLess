@@ -9,3 +9,5 @@ pytest-cov==6.1.0
 pytest-timeout==2.3.1
 sentence-transformers==3.0.0
 tf-keras
+mlflow
+optuna

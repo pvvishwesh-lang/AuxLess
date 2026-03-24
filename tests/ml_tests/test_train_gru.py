@@ -5,7 +5,8 @@ Covers:
   - SessionDataset.__init__(), __len__(), __getitem__()
   - Dataset sample generation from sequences
   - DataLoader compatibility
-  - train() (mocked BigQuery, no actual training)
+  - train() with mocked MLflow (no actual BigQuery or training)
+  - load_training_data() (mocked BigQuery)
   - Edge cases: empty sequences, missing embeddings, short sequences
 """
 
@@ -60,7 +61,7 @@ class TestSessionDataset:
     def test_len_correct_for_subsequences(self):
         from ml.gru.train_gru import SessionDataset
         lookup = make_embedding_lookup()
-        # one session with 4 songs → 3 subsequences (1→2, 1-2→3, 1-3→4)
+        # one session with 4 songs -> 3 subsequences (1->2, 1-2->3, 1-3->4)
         seq    = [("vid_0", 1), ("vid_1", 0), ("vid_2", 1), ("vid_3", 0)]
         dataset = SessionDataset([seq], lookup)
         assert len(dataset) == 3
@@ -125,19 +126,15 @@ class TestSessionDataset:
     def test_skips_missing_target_video_id(self):
         from ml.gru.train_gru import SessionDataset
         lookup = make_embedding_lookup(10)
-        # seq contains a video_id not in lookup
         seq    = [("vid_0", 1), ("nonexistent", 0), ("vid_1", 1)]
         dataset = SessionDataset([seq], lookup)
-        # sample with nonexistent target should be skipped
-        # remaining valid pairs: vid_0→nonexistent (skipped), vid_0,nonexistent→vid_1 (skipped)
-        assert len(dataset) >= 0   # may be 0 if all targets are missing
+        assert len(dataset) >= 0
 
     def test_skips_missing_input_video_id(self):
         from ml.gru.train_gru import SessionDataset
         lookup = make_embedding_lookup(10)
         seq    = [("nonexistent", 1), ("vid_0", 0), ("vid_1", 1)]
         dataset = SessionDataset([seq], lookup)
-        # input has nonexistent → those samples skipped
         assert len(dataset) >= 0
 
     def test_empty_sequences_returns_empty_dataset(self):
@@ -149,7 +146,7 @@ class TestSessionDataset:
     def test_single_song_sequence_skipped(self):
         from ml.gru.train_gru import SessionDataset
         lookup  = make_embedding_lookup()
-        seq     = [("vid_0", 1)]   # only 1 song → no valid (input, target) pair
+        seq     = [("vid_0", 1)]
         dataset = SessionDataset([seq], lookup)
         assert len(dataset) == 0
 
@@ -192,7 +189,6 @@ class TestSessionDataset:
         dataset = SessionDataset([seq], lookup)
         if len(dataset) > 0:
             x, _  = dataset[0]
-            # last dim of last non-padding row should be liked_flag
             last_flag = x[-1, -1].item()
             assert last_flag in {0.0, 1.0}
 
@@ -269,22 +265,170 @@ class TestMaxSeqLen:
         assert MAX_SEQ_LEN == inference_max
 
 
-# ── train() tests (mocked, no actual BigQuery or training) ───────────────────
+# ── train() tests (mocked MLflow, no actual BigQuery or training) ─────────────
 
 class TestTrain:
+
+    @patch("ml.gru.train_gru.mlflow")
+    @patch("ml.gru.train_gru.torch.save")
+    @patch("ml.gru.train_gru.os.makedirs")
+    def test_train_runs_without_error(
+        self, mock_makedirs, mock_save, mock_mlflow
+    ):
+        from ml.gru.train_gru import train
+
+        lookup    = make_embedding_lookup()
+        train_seqs = make_sequences(8, 4)
+        val_seqs   = make_sequences(2, 4)
+
+        model, best_val_loss = train(
+            train_seqs=train_seqs,
+            val_seqs=val_seqs,
+            embedding_lookup=lookup,
+            epochs=1,
+            batch_size=4,
+            patience=2,
+            save_model=False,
+        )
+        assert model is not None
+        assert isinstance(best_val_loss, float)
+
+    @patch("ml.gru.train_gru.mlflow")
+    @patch("ml.gru.train_gru.torch.save")
+    @patch("ml.gru.train_gru.os.makedirs")
+    def test_train_saves_model(
+        self, mock_makedirs, mock_save, mock_mlflow
+    ):
+        from ml.gru.train_gru import train
+
+        lookup     = make_embedding_lookup()
+        train_seqs = make_sequences(8, 4)
+        val_seqs   = make_sequences(2, 4)
+
+        train(
+            train_seqs=train_seqs,
+            val_seqs=val_seqs,
+            embedding_lookup=lookup,
+            epochs=1,
+            batch_size=4,
+            patience=2,
+            save_model=True,
+        )
+        mock_save.assert_called()
+
+    @patch("ml.gru.train_gru.mlflow")
+    @patch("ml.gru.train_gru.torch.save")
+    @patch("ml.gru.train_gru.os.makedirs")
+    def test_train_returns_session_gru(
+        self, mock_makedirs, mock_save, mock_mlflow
+    ):
+        from ml.gru.train_gru import train
+        from ml.gru.gru_model import SessionGRU
+
+        lookup     = make_embedding_lookup()
+        train_seqs = make_sequences(8, 4)
+        val_seqs   = make_sequences(2, 4)
+
+        model, _ = train(
+            train_seqs=train_seqs,
+            val_seqs=val_seqs,
+            embedding_lookup=lookup,
+            epochs=1,
+            batch_size=4,
+            patience=2,
+            save_model=False,
+        )
+        assert isinstance(model, SessionGRU)
+
+    @patch("ml.gru.train_gru.mlflow")
+    @patch("ml.gru.train_gru.torch.save")
+    @patch("ml.gru.train_gru.os.makedirs")
+    def test_train_returns_best_val_loss(
+        self, mock_makedirs, mock_save, mock_mlflow
+    ):
+        from ml.gru.train_gru import train
+
+        lookup     = make_embedding_lookup()
+        train_seqs = make_sequences(8, 4)
+        val_seqs   = make_sequences(2, 4)
+
+        _, best_val_loss = train(
+            train_seqs=train_seqs,
+            val_seqs=val_seqs,
+            embedding_lookup=lookup,
+            epochs=2,
+            batch_size=4,
+            patience=2,
+            save_model=False,
+        )
+        assert best_val_loss > 0
+        assert best_val_loss < float("inf")
+
+    @patch("ml.gru.train_gru.mlflow")
+    @patch("ml.gru.train_gru.torch.save")
+    @patch("ml.gru.train_gru.os.makedirs")
+    def test_train_logs_to_mlflow(
+        self, mock_makedirs, mock_save, mock_mlflow
+    ):
+        from ml.gru.train_gru import train
+
+        lookup     = make_embedding_lookup()
+        train_seqs = make_sequences(8, 4)
+        val_seqs   = make_sequences(2, 4)
+
+        train(
+            train_seqs=train_seqs,
+            val_seqs=val_seqs,
+            embedding_lookup=lookup,
+            epochs=1,
+            batch_size=4,
+            patience=2,
+            save_model=False,
+        )
+        # verify MLflow was called to log params and metrics
+        mock_mlflow.log_params.assert_called_once()
+        mock_mlflow.log_metrics.assert_called()
+
+    @patch("ml.gru.train_gru.mlflow")
+    @patch("ml.gru.train_gru.torch.save")
+    @patch("ml.gru.train_gru.os.makedirs")
+    def test_train_custom_hyperparams(
+        self, mock_makedirs, mock_save, mock_mlflow
+    ):
+        from ml.gru.train_gru import train
+
+        lookup     = make_embedding_lookup()
+        train_seqs = make_sequences(8, 4)
+        val_seqs   = make_sequences(2, 4)
+
+        model, _ = train(
+            train_seqs=train_seqs,
+            val_seqs=val_seqs,
+            embedding_lookup=lookup,
+            hidden_dim=128,
+            num_layers=1,
+            dropout=0.2,
+            epochs=1,
+            batch_size=8,
+            lr=5e-4,
+            patience=2,
+            save_model=False,
+        )
+        assert model is not None
+
+
+# ── load_training_data() tests (mocked BigQuery) ─────────────────────────────
+
+class TestLoadTrainingData:
 
     @patch("ml.gru.train_gru.get_client")
     @patch("ml.gru.train_gru.fetch_all_embeddings")
     @patch("ml.gru.train_gru.generate_synthetic_sessions")
     @patch("ml.gru.train_gru.get_session_sequences")
-    @patch("ml.gru.train_gru.torch.save")
-    @patch("ml.gru.train_gru.os.makedirs")
-    def test_train_runs_without_error(
-        self, mock_makedirs, mock_save, mock_seqs,
-        mock_synth, mock_fetch, mock_client
+    def test_returns_four_items(
+        self, mock_seqs, mock_synth, mock_fetch, mock_client
     ):
-        from ml.gru.train_gru import train, SessionDataset
-        import pandas as pd
+        from ml.gru.train_gru import load_training_data
 
         catalog = pd.DataFrame({
             "video_id":    [f"vid_{i}" for i in range(20)],
@@ -295,35 +439,51 @@ class TestTrain:
         })
         mock_fetch.return_value = catalog
         mock_synth.return_value = MagicMock()
-        seqs = make_sequences(10, 4)
-        mock_seqs.return_value = seqs
+        mock_seqs.return_value  = make_sequences(10, 4)
 
-        model = train(
-            num_sessions=10,
-            epochs=1,
-            batch_size=4,
-            lr=1e-3,
-            val_split=0.2,
-            patience=2,
+        result = load_training_data(num_sessions=10, val_split=0.2)
+        assert len(result) == 4
+
+    @patch("ml.gru.train_gru.get_client")
+    @patch("ml.gru.train_gru.fetch_all_embeddings")
+    @patch("ml.gru.train_gru.generate_synthetic_sessions")
+    @patch("ml.gru.train_gru.get_session_sequences")
+    def test_returns_train_val_split(
+        self, mock_seqs, mock_synth, mock_fetch, mock_client
+    ):
+        from ml.gru.train_gru import load_training_data
+
+        catalog = pd.DataFrame({
+            "video_id":    [f"vid_{i}" for i in range(20)],
+            "track_title": [f"Song {i}" for i in range(20)],
+            "artist_name": ["Artist"] * 20,
+            "genre":       ["pop"] * 20,
+            "embedding":   [list(np.random.rand(386).astype(np.float32)) for _ in range(20)],
+        })
+        mock_fetch.return_value = catalog
+        mock_synth.return_value = MagicMock()
+        mock_seqs.return_value  = make_sequences(10, 4)
+
+        train_seqs, val_seqs, lookup, songs_df = load_training_data(
+            num_sessions=10, val_split=0.2
         )
-        assert model is not None
+        assert len(train_seqs) > 0
+        assert len(val_seqs) > 0
+        assert isinstance(lookup, dict)
+        assert isinstance(songs_df, pd.DataFrame)
 
     @patch("ml.gru.train_gru.get_client")
     @patch("ml.gru.train_gru.fetch_all_embeddings")
     @patch("ml.gru.train_gru.generate_synthetic_sessions")
     @patch("ml.gru.train_gru.get_session_sequences")
-    @patch("ml.gru.train_gru.torch.save")
-    @patch("ml.gru.train_gru.os.makedirs")
-    def test_train_saves_model(
-        self, mock_makedirs, mock_save, mock_seqs,
-        mock_synth, mock_fetch, mock_client
+    def test_embedding_lookup_has_correct_keys(
+        self, mock_seqs, mock_synth, mock_fetch, mock_client
     ):
-        from ml.gru.train_gru import train
-        import pandas as pd
+        from ml.gru.train_gru import load_training_data
 
         catalog = pd.DataFrame({
             "video_id":    [f"vid_{i}" for i in range(20)],
-            "track_title": ["Song"] * 20,
+            "track_title": [f"Song {i}" for i in range(20)],
             "artist_name": ["Artist"] * 20,
             "genre":       ["pop"] * 20,
             "embedding":   [list(np.random.rand(386).astype(np.float32)) for _ in range(20)],
@@ -332,45 +492,30 @@ class TestTrain:
         mock_synth.return_value = MagicMock()
         mock_seqs.return_value  = make_sequences(10, 4)
 
-        train(num_sessions=10, epochs=1, batch_size=4, patience=2)
-        mock_save.assert_called()
-
-    @patch("ml.gru.train_gru.get_client")
-    @patch("ml.gru.train_gru.fetch_all_embeddings")
-    @patch("ml.gru.train_gru.generate_synthetic_sessions")
-    @patch("ml.gru.train_gru.get_session_sequences")
-    @patch("ml.gru.train_gru.torch.save")
-    @patch("ml.gru.train_gru.os.makedirs")
-    def test_train_returns_session_gru(
-        self, mock_makedirs, mock_save, mock_seqs,
-        mock_synth, mock_fetch, mock_client
-    ):
-        from ml.gru.train_gru import train
-        from ml.gru.gru_model import SessionGRU
-        import pandas as pd
-
-        catalog = pd.DataFrame({
-            "video_id":    [f"vid_{i}" for i in range(20)],
-            "track_title": ["Song"] * 20,
-            "artist_name": ["Artist"] * 20,
-            "genre":       ["pop"] * 20,
-            "embedding":   [list(np.random.rand(386).astype(np.float32)) for _ in range(20)],
-        })
-        mock_fetch.return_value = catalog
-        mock_synth.return_value = MagicMock()
-        mock_seqs.return_value  = make_sequences(10, 4)
-
-        model = train(num_sessions=10, epochs=1, batch_size=4, patience=2)
-        assert isinstance(model, SessionGRU)
+        _, _, lookup, _ = load_training_data(num_sessions=10)
+        assert "vid_0" in lookup
+        assert lookup["vid_0"].shape == (386,)
 
 
 # ── Live training test (skipped in CI) ────────────────────────────────────────
 
 @pytest.mark.skipif(os.getenv("CI") == "true", reason="Skipped in CI — requires GCP + GPU")
 def test_full_training_pipeline_live():
-    from ml.gru.train_gru import train
-    model = train(num_sessions=100, epochs=2, batch_size=32)
+    from ml.gru.train_gru import load_training_data, train
+    import mlflow
+
+    train_seqs, val_seqs, lookup, _ = load_training_data(num_sessions=100)
+    mlflow.set_experiment("auxless-gru-test")
+    with mlflow.start_run(run_name="live_test"):
+        model, loss = train(
+            train_seqs=train_seqs,
+            val_seqs=val_seqs,
+            embedding_lookup=lookup,
+            epochs=2,
+            batch_size=32,
+        )
     assert model is not None
+    assert loss < float("inf")
 
 
 if __name__ == "__main__":

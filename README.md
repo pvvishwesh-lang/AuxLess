@@ -12,7 +12,7 @@
 ![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
 ![Pytest](https://img.shields.io/badge/Pytest-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white)
 ![Slack](https://img.shields.io/badge/Slack-4A154B?style=for-the-badge&logo=slack&logoColor=white)
-
+![CI](https://github.com/pvvishwesh-lang/US-Macroeconomics-Indicators-Pipeline/actions/workflows/ci.yml/badge.svg)
 ## Party Music Recommendation System
 
 A real-time, multi user music recommendation system designed for social settings. The system aggregates playlist data from every single user, clusters the songs by genres and adapts playback using live user feedback.

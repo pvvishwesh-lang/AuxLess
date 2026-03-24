@@ -147,14 +147,18 @@ class TestGenerateSyntheticSessions:
         df = make_catalog(50)
         r1 = generate_synthetic_sessions(df, num_sessions=5, random_seed=42)
         r2 = generate_synthetic_sessions(df, num_sessions=5, random_seed=42)
-        assert list(r1["session_id"]) == list(r2["session_id"])
+        # session_ids use uuid4 (not seeded by numpy), so compare
+        # deterministic columns instead
+        assert list(r1["video_id"]) == list(r2["video_id"])
+        assert list(r1["liked_flag"]) == list(r2["liked_flag"])
+        assert list(r1["play_order"]) == list(r2["play_order"])
 
     def test_different_seeds_different_results(self):
         from ml.gru.synthetic_data import generate_synthetic_sessions
         df = make_catalog(50)
         r1 = generate_synthetic_sessions(df, num_sessions=10, random_seed=1)
         r2 = generate_synthetic_sessions(df, num_sessions=10, random_seed=2)
-        assert list(r1["session_id"]) != list(r2["session_id"])
+        assert list(r1["video_id"]) != list(r2["video_id"])
 
     def test_preferred_genre_liked_rate_higher(self):
         from ml.gru.synthetic_data import generate_synthetic_sessions
@@ -219,7 +223,7 @@ class TestGenerateSyntheticSessions:
         df = make_catalog(20)
         df.loc[:5, "genre"] = "unknown"
         result = generate_synthetic_sessions(df, num_sessions=10)
-        assert "unknown" not in result["preferred_genre"].unique() or True  # may be excluded
+        assert "unknown" not in result["preferred_genre"].unique() or True
 
     def test_has_artist_name_column(self):
         from ml.gru.synthetic_data import generate_synthetic_sessions
@@ -323,7 +327,6 @@ class TestGetSessionSequences:
             "play_order": [1,    1,    2],
         })
         result = get_session_sequences(df)
-        # s1 has only 1 song → excluded
         assert len(result) == 1
         assert len(result[0]) == 2
 

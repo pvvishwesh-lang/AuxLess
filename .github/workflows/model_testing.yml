@@ -24,13 +24,10 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # GCP config (mocked values for CI — all GCP calls are mocked in tests)
       PROJECT_ID:          music-recommender-490319
       FIRESTORE_DATABASE:  auxless
       BUCKET:              youtube-pipeline-staging-bucket
       GRU_MODEL_PATH:      ml/gru/gru_model.pt
-
-      # Flag used by @pytest.mark.skipif to skip live GCP tests in CI
       CI: "true"
 
     steps:
@@ -62,12 +59,16 @@ jobs:
       - name: Create package __init__.py files
         run: |
           mkdir -p ml/recommendation/cf
+          mkdir -p ml/evaluation
           touch ml/__init__.py
           touch ml/preprocessing/__init__.py
           touch ml/feature_engineering/__init__.py
           touch ml/recommendation/__init__.py
           touch ml/recommendation/cf/__init__.py
           touch ml/gru/__init__.py
+          touch ml/evaluation/__init__.py
+          touch tests/__init__.py
+          touch tests/ml_tests/__init__.py
 
       - name: Run ML tests
         run: |

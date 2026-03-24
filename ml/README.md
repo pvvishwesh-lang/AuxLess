@@ -2,7 +2,7 @@
 
 ## Overview
 
-The ML pipeline generates real-time group music recommendations for multi-user party sessions. It takes preprocessed playlist data from the batch pipeline, builds song embeddings, and runs a hybrid recommendation engine combining Content-Based Filtering (CBF), In-Session Collaborative Filtering (CF), and a GRU sequential model. Recommendations adapt in real time based on user feedback from the streaming pipeline.
+The ML pipeline generates real-time group music recommendations for multi-user party sessions. It takes preprocessed playlist data from the batch pipeline, builds song embeddings, and runs a hybrid recommendation engine combining Content-Based Filtering (CBF), Collaborative Filtering (CF), and a GRU sequential model. Recommendations adapt in real time based on user feedback from the streaming pipeline.
 
 Fully deployed on GCP with Cloud Run, BigQuery, Firestore, and Pub/Sub.
 
@@ -122,7 +122,7 @@ Optuna trial results show that learning rate is the most sensitive parameter, wi
 
 The 386-dim embedding captures feature importance implicitly: text embeddings (384 dims) dominate the representation, while numeric features (2 dims) provide supplementary duration and popularity signals. The liked_flag (1 dim, GRU input only) lets the model weight liked songs more heavily in sequential predictions.
 
-The hybrid weights (CBF 0.4, CF 0.3, GRU 0.3) control the balance between group preferences, in-room user similarity, and sequential patterns. The additive session score (0.3) ensures real-time feedback always has influence.
+The hybrid weights (CBF 0.4, CF 0.3, GRU 0.3) control the balance between group preferences, population co-occurrence patterns, and sequential patterns. The additive session score (0.3) ensures real-time feedback always has influence.
 
 ## Recommendation Engine
 
@@ -130,7 +130,7 @@ The engine combines three signals in a hybrid architecture.
 
 **CBF** (`ml/recommendation/CBF.py`) builds a global group preference vector by averaging per-user vectors (liked embeddings minus 0.5 times disliked embeddings, L2 normalized, weighted by liked count). Cosine similarity against all catalog songs produces the base ranking, nudged by real-time session feedback scores.
 
-**In-Session CF** (`ml/recommendation/cf/CF.py`) exploits user similarity within the room itself. Each user's YouTube playlist is treated as their preference profile. Users with overlapping genre tastes are identified as similar, and songs from one user's playlist that similar users haven't heard are surfaced as recommendations. This works from session 1 with zero external data since the batch pipeline already fetches each user's playlists.
+**CF** (`ml/recommendation/cf/CF.py`) uses item-item co-occurrence across the full user population. For each candidate song, it finds the strongest connection between that song and any of the group's liked songs based on how many users in the database liked both. Scores are normalized by the candidate's total popularity to avoid surfacing songs that score high simply because everyone has them. When population data is unavailable (cold deployment), CF falls back to embedding-based similarity between candidates and the group's liked songs, producing scores in the same [0, 1] range so the aggregation requires no special handling.
 
 **GRU** (`ml/gru/gru_inference.py`) activates after 3 songs have been played. It takes the play sequence (embedding + liked flag per song), runs a forward pass to predict the next song embedding, and ranks candidates by cosine similarity.
 
@@ -168,7 +168,7 @@ The full automated flow: developer pushes code, GitHub Actions runs tests, Cloud
 
 The trained model is stored at `gs://youtube-pipeline-staging-bucket/models/gru_model.pt`. MLflow logs every training run with the full model artifact, hyperparameters, and validation metrics. GCS object versioning supports rollback to previous model versions.
 
-If the model fails to load at session start, the system gracefully falls back to CBF-only recommendations. This ensures the service never goes down due to a bad model.
+If the model fails to load at session start, the system gracefully falls back to CBF + CF only recommendations. This ensures the service never goes down due to a bad model.
 
 ## Testing
 
@@ -211,7 +211,7 @@ ml/
 │   ├── user_vectors.py                # Per-user and global preference vectors
 │   ├── bigquery_client.py            # Song catalog + user preferences
 │   ├── firestore_client.py           # Session state reads
-│   └── cf/CF.py                       # In-session collaborative filtering
+│   └── cf/CF.py                       # Collaborative filtering (co-occurrence + fallback)
 └── evaluation/
     └── model_bias.py                  # Genre, popularity, score disparity checks
 ```

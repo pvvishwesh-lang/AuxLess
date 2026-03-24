@@ -5,8 +5,8 @@ BigQuery client for:
                   stored as ARRAY<STRING> of video_ids
 
 BigQuery tables:
-  song_recommendations.song_embeddings  → song catalog
-  song_recommendations.users            → user liked/disliked songs
+  song_recommendations.song_embeddings  -> song catalog
+  song_recommendations.users            -> user liked/disliked songs
 
 All table references come from config.py.
 """
@@ -32,9 +32,6 @@ def fetch_all_embeddings(client: bigquery.Client) -> pd.DataFrame:
     """
     Pulls all songs and their embedding vectors from BigQuery.
     Called once per session at initialize_session().
-
-    Returns DataFrame with:
-    video_id, track_title, artist_name, genre, embedding (np.array)
     """
     logger.info("Fetching all song embeddings from BigQuery...")
     query = f"""
@@ -83,7 +80,7 @@ def load_embeddings(client: bigquery.Client, df: pd.DataFrame):
     Inserts new song embeddings into BigQuery song catalog.
     Skips songs already present.
     """
-    logger.info(f"Starting load — {len(df)} songs in batch.")
+    logger.info(f"Starting load -- {len(df)} songs in batch.")
 
     existing_ids = get_existing_video_ids(client)
     df_new       = df[~df["video_id"].isin(existing_ids)].reset_index(drop=True)
@@ -111,18 +108,8 @@ def get_user_liked_songs(
     user_ids: list,
 ) -> dict:
     """
-    Fetches liked song video_ids for each user from BigQuery users table.
-    Used to build per-user preference vectors for CBF and CF.
-
-    BigQuery schema:
-    users: user_id STRING, liked_songs ARRAY<STRING>, ...
-
-    Returns:
-    {
-        "user_1": ["video_id_a", "video_id_b"],
-        "user_2": ["video_id_c"],
-        ...
-    }
+    Fetches liked song video_ids for specific users.
+    Used to build per-user preference vectors for CBF.
     """
     if not user_ids:
         return {}
@@ -159,14 +146,8 @@ def get_user_disliked_songs(
     user_ids: list,
 ) -> dict:
     """
-    Fetches disliked song video_ids for each user from BigQuery users table.
+    Fetches disliked song video_ids for specific users.
     Used to push recommendations away from disliked content.
-
-    Returns:
-    {
-        "user_1": ["video_id_x", "video_id_y"],
-        ...
-    }
     """
     if not user_ids:
         return {}
@@ -192,5 +173,32 @@ def get_user_disliked_songs(
                 )
     except Exception as e:
         logger.error(f"Failed to fetch disliked songs from BigQuery: {e}")
+
+    return result
+
+
+def fetch_all_user_liked(client: bigquery.Client) -> dict:
+    """
+    Fetches liked songs for ALL users in the database.
+    Used by Collaborative Filtering to build the co-occurrence index.
+
+    Returns:
+        { user_id: [video_id, ...] }
+    """
+    query = f"""
+        SELECT user_id, liked_songs
+        FROM `{USERS_TABLE_REF}`
+        WHERE ARRAY_LENGTH(liked_songs) > 0
+    """
+
+    result = {}
+    try:
+        for row in client.query(query).result():
+            liked = list(row.liked_songs) if row.liked_songs else []
+            if liked:
+                result[row.user_id] = liked
+        logger.info(f"Fetched liked songs for {len(result)} users (full population).")
+    except Exception as e:
+        logger.error(f"Failed to fetch all user liked songs: {e}")
 
     return result

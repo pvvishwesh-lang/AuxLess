@@ -44,7 +44,7 @@ def run_pipeline_for_user(user_id: str,refresh_token: str,bucket: str,prefix_val
         f"youtube-pipeline-{session_id[:10]}-"
         f"{sanitize_for_job_name(user_id)[:10]}-{unique_id}"
     )
-    gcp_options.region = "us-central1"
+    gcp_options.region = "europe-west1"
     gcp_options.staging_location = "gs://youtube-pipeline-staging-bucket/staging"
     gcp_options.temp_location = "gs://youtube-pipeline-staging-bucket/temp"
     gcp_options.service_account_email = os.environ["SERVICE_ACCOUNT_EMAIL"]

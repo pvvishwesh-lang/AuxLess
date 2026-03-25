@@ -33,6 +33,7 @@ def _run_session_safe(session_id: str):
 
 def _run_ml_session_safe(session_id: str):
     try:
+        from ml.ml_trigger import _run_ml_session
         _run_ml_session(session_id)
     except Exception as e:
         logging.getLogger(__name__).error(f"ML session {session_id} failed in background thread: {e}",exc_info=True)
@@ -111,7 +112,6 @@ def pubsub_worker():
 
 @app.route("/ml", methods=["POST"])
 def ml_worker():
-    from ml.ml_trigger import _run_ml_session
     envelope = request.get_json(silent=True)
     if not envelope:
         logging.getLogger(__name__).warning("ML endpoint received request with no JSON body")

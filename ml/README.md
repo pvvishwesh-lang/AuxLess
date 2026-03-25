@@ -222,4 +222,4 @@ ml/
 - Redis caching for the 81K embedding catalog
 - Automated retraining via Cloud Scheduler on a weekly cadence
 - A/B testing framework to compare model versions in production
-- SHAP analysis for deeper embedding interpretability
+- SHAP analysis for deeper embedding interpretability 

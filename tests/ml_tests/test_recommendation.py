@@ -577,6 +577,7 @@ class TestAggregateScores:
         cbf_df = self._make_cbf_df()
         result, gru_weight = _aggregate_scores(
             cbf_df=cbf_df,
+            cf_df=pd.DataFrame(),
             gru_df=pd.DataFrame(),
             gru_active=False,
             songs_played=2,
@@ -596,6 +597,7 @@ class TestAggregateScores:
         })
         result, gru_weight = _aggregate_scores(
             cbf_df=cbf_df,
+            cf_df=pd.DataFrame(),
             gru_df=gru_df,
             gru_active=True,
             songs_played=6,
@@ -607,6 +609,7 @@ class TestAggregateScores:
         from ml.recommendation.main import _aggregate_scores
         result, gru_weight = _aggregate_scores(
             cbf_df=pd.DataFrame(),
+            cf_df=pd.DataFrame(),
             gru_df=pd.DataFrame(),
             gru_active=False,
             songs_played=1,
@@ -624,8 +627,8 @@ class TestAggregateScores:
         cbf_df_with_session             = cbf_df.copy()
         cbf_df_with_session["session_score"] = 0.5
 
-        result_no, _   = _aggregate_scores(cbf_df_no_session,   pd.DataFrame(), False, 2)
-        result_with, _ = _aggregate_scores(cbf_df_with_session, pd.DataFrame(), False, 2)
+        result_no, _   = _aggregate_scores(cbf_df_no_session,   pd.DataFrame(), pd.DataFrame(), False, 2)
+        result_with, _ = _aggregate_scores(cbf_df_with_session, pd.DataFrame(), pd.DataFrame(), False, 2)
 
         # final scores must differ when session_score differs
         assert not np.allclose(
@@ -638,6 +641,7 @@ class TestAggregateScores:
         cbf_df = self._make_cbf_df()
         result, _ = _aggregate_scores(
             cbf_df=cbf_df,
+            cf_df=pd.DataFrame(),
             gru_df=pd.DataFrame(),
             gru_active=False,
             songs_played=2,
@@ -651,6 +655,7 @@ class TestAggregateScores:
         cbf_df = self._make_cbf_df(n=50)
         result, _ = _aggregate_scores(
             cbf_df=cbf_df,
+            cf_df=pd.DataFrame(),
             gru_df=pd.DataFrame(),
             gru_active=False,
             songs_played=2,

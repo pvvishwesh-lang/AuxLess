@@ -10,7 +10,7 @@ from backend.pipelines.api.pubsub_publisher import publish_feedback_event
 from backend.pipelines.api.firestore_client import FirestoreClient
 from backend.pipelines.api.bq_sync import sync_session_to_bigquery
 import time
-from ml.ml_trigger import _run_ml_session
+
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -111,6 +111,7 @@ def pubsub_worker():
 
 @app.route("/ml", methods=["POST"])
 def ml_worker():
+    from ml.ml_trigger import _run_ml_session
     envelope = request.get_json(silent=True)
     if not envelope:
         logging.getLogger(__name__).warning("ML endpoint received request with no JSON body")

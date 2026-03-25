@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 # ── GCS paths ────────────────────────────────────────────────────────────────
 def _mitigated_path(session_id: str) -> str:
-    return f"Final_Output/{session_id}_mitigated.csv"
+    return f"sessions/{session_id}/bias_mitigation/{session_id}_mitigated.csv"
 
 def _preprocessed_path(session_id: str) -> str:
     return f"ml_output/{session_id}_preprocessed.csv"

@@ -1,0 +1,7 @@
+project_id = "music-recommender-490319"
+region = "europe-west1"
+dataflow_region = "us-central1"
+firestore_location = "nam5"
+firestore_database = "auxless"
+github_owner = "pvvishwesh-lang"
+github_repo = "AuxLess"

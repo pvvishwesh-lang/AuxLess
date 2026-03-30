@@ -24,7 +24,8 @@ gcloud services enable \
   bigquery.googleapis.com \
   youtube.googleapis.com \
   compute.googleapis.com \
-  cloudfunctions.googleapis.com
+  cloudfunctions.googleapis.com \
+  storage.googleapis.com
 
 echo "Waiting 30s for APIs to propagate..."
 sleep 30
@@ -35,6 +36,12 @@ gcloud artifacts repositories create cloud-run-source-deploy \
   --repository-format=docker \
   --location="$REGION" \
   --quiet 2>/dev/null || echo "  (already exists)"
+
+echo ""
+echo "Creating ML models bucket..."
+ML_MODELS_BUCKET="${PROJECT_ID}-ml-models"
+gcloud storage buckets create "gs://${ML_MODELS_BUCKET}" --location=US --quiet 2>/dev/null || echo "  (bucket already exists)"
+gcloud storage buckets update "gs://${ML_MODELS_BUCKET}" --versioning --quiet 2>/dev/null || true
 
 echo ""
 echo "Building Docker images..."
@@ -66,13 +73,13 @@ echo "Building Dataflow Flex Template..."
 
 BUCKET_NAME="${PROJECT_ID}-pipeline"
 gcloud storage buckets create "gs://${BUCKET_NAME}" --location=US --quiet 2>/dev/null || echo "  (bucket already exists)"
-
 gcloud storage buckets update "gs://${BUCKET_NAME}" --no-soft-delete --quiet 2>/dev/null || true
 
 gcloud dataflow flex-template build \
   "gs://${BUCKET_NAME}/templates/feedback-streaming.json" \
   --image "${REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/feedback-streaming:latest" \
   --sdk-language PYTHON
+
 echo ""
 echo "Running Terraform..."
 cd "$SCRIPT_DIR/terraform"
@@ -80,12 +87,13 @@ terraform init -input=false
 terraform apply -auto-approve
 
 CLOUD_RUN_URL=$(terraform output -raw cloud_run_url)
+ML_MODELS_BUCKET=$(terraform output -raw ml_models_bucket)
 
 echo ""
 echo "Deploying Cloud Functions..."
 
 if [ -d "$SCRIPT_DIR/backend/functions" ]; then
-  echo " Deploying auxlessfunction..."
+  echo "  Deploying auxlessfunction..."
   cd "$SCRIPT_DIR/backend/functions"
   gcloud functions deploy auxlessfunction \
     --gen2 \
@@ -112,6 +120,15 @@ if [ -d "$SCRIPT_DIR/backend/functions" ]; then
 fi
 
 echo ""
-echo "  Cloud Run URL: $CLOUD_RUN_URL"
-echo "  Pipeline Bucket: gs://${BUCKET_NAME}"
+echo "============================================"
+echo "  Deployment Complete!"
+echo "============================================"
+echo "  Cloud Run URL:      $CLOUD_RUN_URL"
+echo "  Pipeline Bucket:    gs://${BUCKET_NAME}"
+echo "  ML Models Bucket:   gs://${ML_MODELS_BUCKET}"
+echo "  GRU Model Path:     gs://${ML_MODELS_BUCKET}/models/gru_model.pt"
+echo "============================================"
+echo ""
+echo "  NOTE: Upload your trained GRU model to:"
+echo "  gs://${ML_MODELS_BUCKET}/models/gru_model.pt"
 echo ""

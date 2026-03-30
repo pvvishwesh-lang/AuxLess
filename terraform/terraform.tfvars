@@ -1,4 +1,4 @@
-project_id         = "music-recommender-490319"
+project_id         = "flash-aviary-491923-h1"
 region             = "europe-west1"
 dataflow_region    = "us-central1"
 firestore_location = "nam5"

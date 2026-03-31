@@ -72,6 +72,7 @@ resource "google_storage_bucket" "pipeline" {
   soft_delete_policy {
     retention_duration_seconds = 0
   }
+force_destroy = true
 }
 
 # ML model storage bucket — stores gru_model.pt and ml outputs
@@ -86,6 +87,7 @@ resource "google_storage_bucket" "ml_models" {
   soft_delete_policy {
     retention_duration_seconds = 0
   }
+  force_destroy = true
 }
 
 # ── Artifact Registry ─────────────────────────────────────────────────────────
@@ -200,6 +202,7 @@ resource "google_secret_manager_secret_version" "service_account" {
 resource "google_bigquery_dataset" "song_recommendations" {
   dataset_id = "song_recommendations"
   location   = "US"
+  delete_contents_on_destroy = true
 }
 
 # Song embeddings table — ML pipeline catalog (81K songs)

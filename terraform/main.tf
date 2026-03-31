@@ -376,21 +376,22 @@ resource "google_cloud_run_v2_service_iam_member" "public" {
 #   ]
 # }
 
-# ── Cloud Build ───────────────────────────────────────────────────────────────
-
-resource "google_cloudbuild_trigger" "deploy" {
-  name     = "auxless-deploy"
-  location = "global"
-  github {
-    owner = var.github_owner
-    name  = var.github_repo
-    push {
-      branch = "^main$"
-    }
-  }
-  filename   = "cloudbuild.yaml"
-  depends_on = [google_project_service.apis]
-}
+# NOTE: Cloud Build trigger is managed manually via GCP Console due to
+# GitHub App connection incompatibility with terraform google provider.
+# Trigger ID: 72f46029-0b2c-426d-be92-30cf6915f032
+# resource "google_cloudbuild_trigger" "deploy" {
+#   name     = "auxless-deploy"
+#   location = "global"
+#   github {
+#     owner = var.github_owner
+#     name  = var.github_repo
+#     push {
+#       branch = "^main$"
+#     }
+#   }
+#   filename   = "cloudbuild.yaml"
+#   depends_on = [google_project_service.apis]
+# }
 
 # ── Outputs ───────────────────────────────────────────────────────────────────
 

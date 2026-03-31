@@ -19,6 +19,23 @@ data "google_project" "current" {
 
 locals {
   project_number = data.google_project.current.number
+  tf_secrets = [
+    "PROJECT_ID",
+    "FIRESTORE_DATABASE",
+    "BUCKET",
+    "SESSION_READY_TOPIC",
+    "SERVICE_ACCOUNT_EMAIL"
+  ]
+  external_secrets = [
+    "CLIENT_ID",
+    "CLIENT_SECRET",
+    "SLACK_WEBHOOK_URL",
+    "TOKEN_URI",
+    "AUTH_URI",
+    "auth_provider_x509_cert_url",
+    "REDIRECT_URIS"
+  ]
+  all_secrets = concat(local.tf_secrets, local.external_secrets)
 }
 
 # ── APIs ──────────────────────────────────────────────────────────────────────
@@ -145,7 +162,7 @@ resource "google_pubsub_subscription" "feedback_event" {
 # ── Secret Manager ────────────────────────────────────────────────────────────
 
 resource "google_secret_manager_secret" "secrets" {
-  for_each  = toset(var.secret_names)
+  for_each  = toset(local.tf_secrets)
   secret_id = each.key
 
   replication {
@@ -304,12 +321,12 @@ resource "google_cloud_run_v2_service" "auxless_api" {
         container_port = 8080
       }
       dynamic "env" {
-        for_each = var.secret_names
+        for_each = local.all_secrets
         content {
           name = env.value
           value_source {
             secret_key_ref {
-              secret  = env.value
+              secret  = env.value 
               version = "latest"
             }
           }

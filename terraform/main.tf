@@ -121,6 +121,7 @@ resource "google_pubsub_subscription" "batch_trigger" {
     push_endpoint = "${google_cloud_run_v2_service.auxless_api.uri}/"
   }
   ack_deadline_seconds = 600
+  depends_on           = [google_cloud_run_v2_service.auxless_api]
 }
 
 # ML pipeline trigger — SESSION_READY_TOPIC -> Cloud Run /ml
@@ -131,12 +132,13 @@ resource "google_pubsub_subscription" "ml_trigger" {
     push_endpoint = "${google_cloud_run_v2_service.auxless_api.uri}/ml"
   }
   ack_deadline_seconds = 600
+  depends_on           = [google_cloud_run_v2_service.auxless_api]
 }
 
 # Feedback subscription — FeedbackTopic -> feedback-events-sub
 resource "google_pubsub_subscription" "feedback_event" {
   name                 = "feedback-events-sub"
-  topic                = google_pubsub_topic.feedback.id  # fixed: was pointing to wrong topic
+  topic                = google_pubsub_topic.feedback.id
   ack_deadline_seconds = 600
 }
 
@@ -202,8 +204,8 @@ resource "google_bigquery_dataset" "song_recommendations" {
 
 # Song embeddings table — ML pipeline catalog (81K songs)
 resource "google_bigquery_table" "song_embeddings" {
-  dataset_id        = google_bigquery_dataset.song_recommendations.dataset_id
-  table_id          = "song_embeddings"
+  dataset_id          = google_bigquery_dataset.song_recommendations.dataset_id
+  table_id            = "song_embeddings"
   deletion_protection = false
   schema = jsonencode([
     { name = "video_id",         type = "STRING",  mode = "REQUIRED" },
@@ -218,8 +220,8 @@ resource "google_bigquery_table" "song_embeddings" {
 
 # Users table — liked/disliked/skipped/replayed songs per user
 resource "google_bigquery_table" "users" {
-  dataset_id        = google_bigquery_dataset.song_recommendations.dataset_id  # fixed: was google_bigquery.song_recommendations
-  table_id          = "users"
+  dataset_id          = google_bigquery_dataset.song_recommendations.dataset_id
+  table_id            = "users"
   deletion_protection = false
   schema = jsonencode([
     { name = "user_id",        type = "STRING",    mode = "REQUIRED" },
@@ -233,8 +235,8 @@ resource "google_bigquery_table" "users" {
 
 # Session history table — feedback events per session
 resource "google_bigquery_table" "session_history" {
-  dataset_id        = google_bigquery_dataset.song_recommendations.dataset_id
-  table_id          = "session_history"
+  dataset_id          = google_bigquery_dataset.song_recommendations.dataset_id
+  table_id            = "session_history"
   deletion_protection = false
   schema = jsonencode([
     { name = "session_id",  type = "STRING",    mode = "REQUIRED" },
@@ -275,13 +277,15 @@ resource "google_project_iam_member" "compute_roles" {
   member  = "serviceAccount:${local.project_number}-compute@developer.gserviceaccount.com"
 }
 
-resource "google_project_iam_member" "eventarc_invoker" {
-  project = var.project_id
-  role    = "roles/run.invoker"
-  member  = "serviceAccount:service-${local.project_number}@gcp-sa-eventarc.iam.gserviceaccount.com"
-
-  depends_on = [google_project_service.apis]
-}
+# NOTE: Commented out until eventarc service account is provisioned.
+# Re-enable after running: gcloud services enable eventarc.googleapis.com
+# and waiting ~5 minutes for the service account to be created.
+# resource "google_project_iam_member" "eventarc_invoker" {
+#   project = var.project_id
+#   role    = "roles/run.invoker"
+#   member  = "serviceAccount:service-${local.project_number}@gcp-sa-eventarc.iam.gserviceaccount.com"
+#   depends_on = [google_project_service.apis]
+# }
 
 # ── Cloud Run ─────────────────────────────────────────────────────────────────
 
@@ -298,7 +302,6 @@ resource "google_cloud_run_v2_service" "auxless_api" {
       ports {
         container_port = 8080
       }
-      # secrets-based env vars
       dynamic "env" {
         for_each = var.secret_names
         content {
@@ -311,12 +314,10 @@ resource "google_cloud_run_v2_service" "auxless_api" {
           }
         }
       }
-      # plain env vars
       env {
         name  = "PYTHONUNBUFFERED"
         value = "1"
       }
-      # GRU model path — points to GCS where trained model is stored
       env {
         name  = "GRU_MODEL_PATH"
         value = "gs://${google_storage_bucket.ml_models.name}/models/gru_model.pt"
@@ -342,39 +343,38 @@ resource "google_cloud_run_v2_service_iam_member" "public" {
   member   = "allUsers"
 }
 
-# ── Eventarc ──────────────────────────────────────────────────────────────────
-
-resource "google_eventarc_trigger" "firestore_session" {
-  name     = "auxless-session-trigger"
-  location = var.firestore_location
-  matching_criteria {
-    attribute = "type"
-    value     = "google.cloud.firestore.document.v1.created"
-  }
-  matching_criteria {
-    attribute = "database"
-    value     = var.firestore_database
-  }
-  matching_criteria {
-    attribute = "document"
-    value     = "sessions/{sessionId}"
-    operator  = "match-path-pattern"
-  }
-  destination {
-    cloud_run_service {
-      service = "auxlessfunction"
-      region  = var.region
-      path    = "/"
-    }
-  }
-  service_account         = "${local.project_number}-compute@developer.gserviceaccount.com"
-  event_data_content_type = "application/protobuf"
-  depends_on = [
-    google_project_service.apis,
-    google_firestore_database.auxless,
-    google_project_iam_member.eventarc_invoker,
-  ]
-}
+# NOTE: Commented out until eventarc service account is provisioned.
+# resource "google_eventarc_trigger" "firestore_session" {
+#   name     = "auxless-session-trigger"
+#   location = var.firestore_location
+#   matching_criteria {
+#     attribute = "type"
+#     value     = "google.cloud.firestore.document.v1.created"
+#   }
+#   matching_criteria {
+#     attribute = "database"
+#     value     = var.firestore_database
+#   }
+#   matching_criteria {
+#     attribute = "document"
+#     value     = "sessions/{sessionId}"
+#     operator  = "match-path-pattern"
+#   }
+#   destination {
+#     cloud_run_service {
+#       service = "auxlessfunction"
+#       region  = var.region
+#       path    = "/"
+#     }
+#   }
+#   service_account         = "${local.project_number}-compute@developer.gserviceaccount.com"
+#   event_data_content_type = "application/protobuf"
+#   depends_on = [
+#     google_project_service.apis,
+#     google_firestore_database.auxless,
+#     google_project_iam_member.eventarc_invoker,
+#   ]
+# }
 
 # ── Cloud Build ───────────────────────────────────────────────────────────────
 

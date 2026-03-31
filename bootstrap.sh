@@ -47,13 +47,13 @@ echo ""
 echo "Building Docker images..."
 
 echo "  Building auxless-api image..."
-gcloud builds submit \
+gcloud beta builds submit \
   --config=cloudbuild.yaml \
   "$SCRIPT_DIR" \
   --quiet
 
 echo "  Building feedback-streaming image..."
-gcloud builds submit \
+gcloud beta builds submit \
   --config=/dev/stdin "$SCRIPT_DIR" <<EOF
 steps:
   - name: gcr.io/cloud-builders/docker

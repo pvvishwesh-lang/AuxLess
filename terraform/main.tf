@@ -72,7 +72,6 @@ resource "google_storage_bucket" "pipeline" {
   soft_delete_policy {
     retention_duration_seconds = 0
   }
-force_destroy = true
 }
 
 # ML model storage bucket — stores gru_model.pt and ml outputs
@@ -80,14 +79,13 @@ resource "google_storage_bucket" "ml_models" {
   name                        = "${var.project_id}-ml-models"
   location                    = "US"
   uniform_bucket_level_access = true
-  force_destroy               = false
+  force_destroy               = true
   versioning {
     enabled = true
   }
   soft_delete_policy {
     retention_duration_seconds = 0
   }
-  force_destroy = true
 }
 
 # ── Artifact Registry ─────────────────────────────────────────────────────────

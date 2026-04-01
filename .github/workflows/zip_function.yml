@@ -1,0 +1,24 @@
+name: Zip Function
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "backend/functions/**"
+      - ".github/workflows/zip_function.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "backend/functions/**"
+      - ".github/workflows/zip_function.yml"
+jobs:
+  test:
+    name: Zip Function
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Zip function source
+        working-directory: backend/functions
+        run: |
+          zip -r source.zip main.py google_cloud_function.py google_cloud_stream_function.py requirements.txt

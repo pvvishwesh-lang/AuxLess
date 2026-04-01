@@ -22,3 +22,10 @@ jobs:
         working-directory: backend/functions
         run: |
           zip -r source.zip main.py google_cloud_function.py google_cloud_stream_function.py requirements.txt
+      - name: Commit source.zip
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add backend/functions/source.zip
+          git commit -m "chore: update source.zip" || echo "No changes"
+          git push

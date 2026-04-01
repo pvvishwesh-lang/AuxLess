@@ -319,61 +319,61 @@ resource "google_secret_manager_secret_iam_member" "cloudbuild_secret_accessor" 
 
 # ── Cloud Run ─────────────────────────────────────────────────────────────────
 
-#resource "google_cloud_run_v2_service" "auxless_api" {
-  #name     = "auxless-api"
-  #location = var.region
-  #template {
-    #scaling {
-      #min_instance_count = 1
-      #max_instance_count = 6
-    #}
-    #containers {
-      #image = "${var.region}-docker.pkg.dev/${var.project_id}/cloud-run-source-deploy/auxless/auxless-git:latest"
-      #ports {
-        #container_port = 8080
-      #}
-      #dynamic "env" {
-        #for_each = local.all_secrets
-        #content {
-          #name = env.value
-          #value_source {
-            #secret_key_ref {
-              #secret  = env.value 
-              #version = "latest"
-            #}
-          #}
-        #}
-      #}
-      #env {
-        #name  = "PYTHONUNBUFFERED"
-        #value = "1"
-      #}
-      #env {
-        #name  = "GRU_MODEL_PATH"
-        #value = "gs://${google_storage_bucket.ml_models.name}/models/gru_model.pt"
-      #}
-    #}
-    #annotations = {
-      #"run.googleapis.com/cpu-throttling" = "false"
-    #}
-  #}
-  #depends_on = [
-    #google_project_service.apis,
-    #google_secret_manager_secret.secrets,
-    #google_artifact_registry_repository.cloud_run,
-    #google_storage_bucket.ml_models,
-    #google_secret_manager_secret_version.project_id,
-    #google_secret_manager_secret_version.firestore_db,
-    #google_secret_manager_secret_version.bucket,
-    #google_secret_manager_secret_version.auth_uri,
-    #google_secret_manager_secret_version.auth_cert,
-    #google_secret_manager_secret_version.session_ready_topic,
-    #google_secret_manager_secret_version.service_account,
-    #google_project_iam_member.compute_roles,
-    #google_artifact_registry_repository.cloud_run,
-    #google_secret_manager_secret_iam_member.cloudbuild_secret_accessor
-  #]
-#}
+resource "google_cloud_run_v2_service" "auxless_api" {
+  name     = "auxless-api"
+  location = var.region
+  template {
+    scaling {
+      min_instance_count = 1
+      max_instance_count = 6
+    }
+    containers {
+      image = "${var.region}-docker.pkg.dev/${var.project_id}/cloud-run-source-deploy/auxless/auxless-git:latest"
+      ports {
+        container_port = 8080
+      }
+      dynamic "env" {
+        for_each = local.all_secrets
+        content {
+          name = env.value
+          value_source {
+            secret_key_ref {
+              secret  = env.value 
+              version = "latest"
+            }
+          }
+        }
+      }
+      env {
+        name  = "PYTHONUNBUFFERED"
+        value = "1"
+      }
+      env {
+        name  = "GRU_MODEL_PATH"
+        value = "gs://${google_storage_bucket.ml_models.name}/models/gru_model.pt"
+      }
+    }
+    annotations = {
+      "run.googleapis.com/cpu-throttling" = "false"
+    }
+  }
+  depends_on = [
+    google_project_service.apis,
+    google_secret_manager_secret.secrets,
+    google_artifact_registry_repository.cloud_run,
+    google_storage_bucket.ml_models,
+    google_secret_manager_secret_version.project_id,
+    google_secret_manager_secret_version.firestore_db,
+    google_secret_manager_secret_version.bucket,
+    google_secret_manager_secret_version.auth_uri,
+    google_secret_manager_secret_version.auth_cert,
+    google_secret_manager_secret_version.session_ready_topic,
+    google_secret_manager_secret_version.service_account,
+    google_project_iam_member.compute_roles,
+    google_artifact_registry_repository.cloud_run,
+    google_secret_manager_secret_iam_member.cloudbuild_secret_accessor
+  ]
+}
 
 #resource "google_cloud_run_v2_service_iam_member" "public" {
   #project  = var.project_id

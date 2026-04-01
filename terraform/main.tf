@@ -24,15 +24,15 @@ locals {
     "FIRESTORE_DATABASE",
     "BUCKET",
     "SESSION_READY_TOPIC",
-    "SERVICE_ACCOUNT_EMAIL"
+    "SERVICE_ACCOUNT_EMAIL",
+    "AUTH_URI",
+    "auth_provider_x509_cert_url",
   ]
   external_secrets = [
     "CLIENT_ID",
     "CLIENT_SECRET",
     "SLACK_WEBHOOK_URL",
     "TOKEN_URI",
-    "AUTH_URI",
-    "auth_provider_x509_cert_url",
     "REDIRECT_URIS"
   ]
   all_secrets = concat(local.tf_secrets, local.external_secrets)
@@ -187,11 +187,6 @@ resource "google_secret_manager_secret_version" "bucket" {
   secret_data = google_storage_bucket.pipeline.name
 }
 
-resource "google_secret_manager_secret_version" "token_uri" {
-  secret      = google_secret_manager_secret.secrets["TOKEN_URI"].id
-  secret_data = "https://oauth2.googleapis.com/token"
-}
-
 resource "google_secret_manager_secret_version" "auth_uri" {
   secret      = google_secret_manager_secret.secrets["AUTH_URI"].id
   secret_data = "https://accounts.google.com/o/oauth2/auth"
@@ -298,12 +293,12 @@ resource "google_project_iam_member" "compute_roles" {
 # NOTE: Commented out until eventarc service account is provisioned.
 # Re-enable after running: gcloud services enable eventarc.googleapis.com
 # and waiting ~5 minutes for the service account to be created.
-# resource "google_project_iam_member" "eventarc_invoker" {
-#   project = var.project_id
-#   role    = "roles/run.invoker"
-#   member  = "serviceAccount:service-${local.project_number}@gcp-sa-eventarc.iam.gserviceaccount.com"
-#   depends_on = [google_project_service.apis]
-# }
+resource "google_project_iam_member" "eventarc_invoker" {
+   project = var.project_id
+   role    = "roles/run.invoker"
+   member  = "serviceAccount:service-${local.project_number}@gcp-sa-eventarc.iam.gserviceaccount.com"
+   depends_on = [google_project_service.apis]
+ }
 
 # ── Cloud Run ─────────────────────────────────────────────────────────────────
 
@@ -350,6 +345,15 @@ resource "google_cloud_run_v2_service" "auxless_api" {
     google_secret_manager_secret.secrets,
     google_artifact_registry_repository.cloud_run,
     google_storage_bucket.ml_models,
+    google_secret_manager_secret_version.project_id,
+    google_secret_manager_secret_version.firestore_db,
+    google_secret_manager_secret_version.bucket,
+    google_secret_manager_secret_version.auth_uri,
+    google_secret_manager_secret_version.auth_cert,
+    google_secret_manager_secret_version.session_ready_topic,
+    google_secret_manager_secret_version.service_account,
+    google_project_iam_member.compute_roles,
+    google_artifact_registry_repository.cloud_run
   ]
 }
 
@@ -362,54 +366,54 @@ resource "google_cloud_run_v2_service_iam_member" "public" {
 }
 
 # NOTE: Commented out until eventarc service account is provisioned.
-# resource "google_eventarc_trigger" "firestore_session" {
-#   name     = "auxless-session-trigger"
-#   location = var.firestore_location
-#   matching_criteria {
-#     attribute = "type"
-#     value     = "google.cloud.firestore.document.v1.created"
-#   }
-#   matching_criteria {
-#     attribute = "database"
-#     value     = var.firestore_database
-#   }
-#   matching_criteria {
-#     attribute = "document"
-#     value     = "sessions/{sessionId}"
-#     operator  = "match-path-pattern"
-#   }
-#   destination {
-#     cloud_run_service {
-#       service = "auxlessfunction"
-#       region  = var.region
-#       path    = "/"
-#     }
-#   }
-#   service_account         = "${local.project_number}-compute@developer.gserviceaccount.com"
-#   event_data_content_type = "application/protobuf"
-#   depends_on = [
-#     google_project_service.apis,
-#     google_firestore_database.auxless,
-#     google_project_iam_member.eventarc_invoker,
-#   ]
-# }
+resource "google_eventarc_trigger" "firestore_session" {
+   name     = "auxless-session-trigger"
+   location = var.firestore_location
+   matching_criteria {
+     attribute = "type"
+     value     = "google.cloud.firestore.document.v1.created"
+   }
+   matching_criteria {
+     attribute = "database"
+     value     = var.firestore_database
+   }
+   matching_criteria {
+     attribute = "document"
+     value     = "sessions/{sessionId}"
+     operator  = "match-path-pattern"
+   }
+   destination {
+     cloud_run_service {
+       service = "auxlessfunction"
+       region  = var.region
+       path    = "/"
+     }
+   }
+   service_account         = "${local.project_number}-compute@developer.gserviceaccount.com"
+   event_data_content_type = "application/protobuf"
+   depends_on = [
+     google_project_service.apis,
+     google_firestore_database.auxless,
+     google_project_iam_member.eventarc_invoker,
+   ]
+ }
 
 # NOTE: Cloud Build trigger is managed manually via GCP Console due to
 # GitHub App connection incompatibility with terraform google provider.
 # Trigger ID: 72f46029-0b2c-426d-be92-30cf6915f032
-# resource "google_cloudbuild_trigger" "deploy" {
-#   name     = "auxless-deploy"
-#   location = "global"
-#   github {
-#     owner = var.github_owner
-#     name  = var.github_repo
-#     push {
-#       branch = "^main$"
-#     }
-#   }
-#   filename   = "cloudbuild.yaml"
-#   depends_on = [google_project_service.apis]
-# }
+ resource "google_cloudbuild_trigger" "deploy" {
+   name     = "auxless-deploy"
+   location = "global"
+   github {
+     owner = var.github_owner
+     name  = var.github_repo
+     push {
+       branch = "^main$"
+     }
+   }
+   filename   = "cloudbuild.yaml"
+   depends_on = [google_project_service.apis]
+ }
 
 # ── Outputs ───────────────────────────────────────────────────────────────────
 

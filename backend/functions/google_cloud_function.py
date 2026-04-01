@@ -12,7 +12,6 @@ db = firestore.Client(database=FIRESTORE_DB)
 publisher = pubsub_v1.PublisherClient()
 topic_path = publisher.topic_path(PROJECT_ID, PUBSUB_TOPIC)
 
-
 def claim_session(session_id):
     doc_ref = db.collection("sessions").document(session_id)
 

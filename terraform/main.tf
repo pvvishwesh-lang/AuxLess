@@ -300,6 +300,23 @@ resource "google_project_iam_member" "eventarc_invoker" {
    depends_on = [google_project_service.apis]
  }
 
+resource "google_secret_manager_secret_iam_member" "cloudbuild_secret_accessor" {
+  for_each  = toset(local.all_secrets)
+  project   = var.project_id
+  secret_id = each.key
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${local.project_number}@cloudbuild.gserviceaccount.com"
+  depends_on = [
+    google_secret_manager_secret_version.project_id,
+    google_secret_manager_secret_version.auth_cert,
+    google_secret_manager_secret_version.firestore_db,
+    google_secret_manager_secret_version.auth_uri,
+    google_secret_manager_secret_version.auth_cert,
+    google_secret_manager_secret_version.session_ready_topic,
+    google_secret_manager_secret_version.service_account
+  ]
+}
+
 # ── Cloud Run ─────────────────────────────────────────────────────────────────
 
 resource "google_cloud_run_v2_service" "auxless_api" {
@@ -353,17 +370,18 @@ resource "google_cloud_run_v2_service" "auxless_api" {
     google_secret_manager_secret_version.session_ready_topic,
     google_secret_manager_secret_version.service_account,
     google_project_iam_member.compute_roles,
-    google_artifact_registry_repository.cloud_run
+    google_artifact_registry_repository.cloud_run,
+    google_secret_manager_secret_iam_member.cloudbuild_secret_accessor
   ]
 }
 
-resource "google_cloud_run_v2_service_iam_member" "public" {
-  project  = var.project_id
-  location = var.region
-  name     = google_cloud_run_v2_service.auxless_api.name
-  role     = "roles/run.invoker"
-  member   = "allUsers"
-}
+#resource "google_cloud_run_v2_service_iam_member" "public" {
+  #project  = var.project_id
+  #location = var.region
+  #name     = google_cloud_run_v2_service.auxless_api.name
+  #role     = "roles/run.invoker"
+  #member   = "allUsers"
+#}
 
 # NOTE: Commented out until eventarc service account is provisioned.
 resource "google_eventarc_trigger" "firestore_session" {

@@ -293,12 +293,12 @@ resource "google_project_iam_member" "compute_roles" {
 # NOTE: Commented out until eventarc service account is provisioned.
 # Re-enable after running: gcloud services enable eventarc.googleapis.com
 # and waiting ~5 minutes for the service account to be created.
-#resource "google_project_iam_member" "eventarc_invoker" {
-   #project = var.project_id
-   #role    = "roles/run.invoker"
-   #member  = "serviceAccount:service-${local.project_number}@gcp-sa-eventarc.iam.gserviceaccount.com"
-   #depends_on = [google_project_service.apis]
- #}
+resource "google_project_iam_member" "eventarc_invoker" {
+   project = var.project_id
+   role    = "roles/run.invoker"
+   member  = "serviceAccount:service-${local.project_number}@gcp-sa-eventarc.iam.gserviceaccount.com"
+   depends_on = [google_project_service.apis]
+ }
 
 resource "google_secret_manager_secret_iam_member" "cloudbuild_secret_accessor" {
   for_each  = toset(local.all_secrets)
@@ -375,13 +375,132 @@ resource "google_cloud_run_v2_service" "auxless_api" {
   ]
 }
 
-#resource "google_cloud_run_v2_service_iam_member" "public" {
-  #project  = var.project_id
-  #location = var.region
-  #name     = google_cloud_run_v2_service.auxless_api.name
-  #role     = "roles/run.invoker"
-  #member   = "allUsers"
-#}
+resource "google_cloud_run_v2_service_iam_member" "public" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.auxless_api.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+# ── Cloud Function Source ─────────────────────────────────────────────────────
+
+resource "google_storage_bucket_object" "function_source" {
+  name   = "cloud-functions/source-${filemd5("${path.module}/../backend/functions/source.zip")}.zip"
+  bucket = google_storage_bucket.pipeline.name
+  source = "${path.module}/../backend/functions/source.zip"
+}
+
+# ── Cloud Function 1: Firestore Trigger → Batch Pipeline ─────────────────────
+
+resource "google_cloudfunctions2_function" "firestore_trigger" {
+  name     = "auxlessfunction"
+  location = var.region
+
+  build_config {
+    runtime     = "python312"
+    entry_point = "firestore_session_trigger"
+
+    source {
+      storage_source {
+        bucket = google_storage_bucket.pipeline.name
+        object = google_storage_bucket_object.function_source.name
+      }
+    }
+  }
+
+  service_config {
+    min_instance_count = 0
+    max_instance_count = 5
+    available_memory   = "256M"
+    timeout_seconds    = 540
+
+    environment_variables = {
+      PROJECT_ID         = var.project_id
+      PUBSUB_TOPIC       = "CloudFunctionPUBSUB"
+      FIRESTORE_DATABASE = var.firestore_database
+    }
+
+    service_account_email = "${local.project_number}-compute@developer.gserviceaccount.com"
+  }
+
+  event_trigger {
+    trigger_region          = var.firestore_location
+    event_type              = "google.cloud.firestore.document.v1.created"
+    retry_policy            = "RETRY_POLICY_DO_NOT_RETRY"
+    service_account_email   = "${local.project_number}-compute@developer.gserviceaccount.com"
+    event_data_content_type = "application/protobuf"
+
+    event_filters {
+      attribute = "database"
+      value     = var.firestore_database
+    }
+
+    event_filters {
+      attribute = "document"
+      value     = "sessions/{sessionId}"
+      operator  = "match-path-pattern"
+    }
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_firestore_database.auxless,
+    google_project_iam_member.eventarc_invoker,
+    google_project_iam_member.compute_roles,
+  ]
+}
+
+# ── Cloud Function 2: Session Ready → Streaming Dataflow ─────────────────────
+
+resource "google_cloudfunctions2_function" "streaming_trigger" {
+  name     = "auxlessstreamfunction"
+  location = var.region
+
+  build_config {
+    runtime     = "python312"
+    entry_point = "trigger_streaming_pipeline"
+
+    source {
+      storage_source {
+        bucket = google_storage_bucket.pipeline.name
+        object = google_storage_bucket_object.function_source.name
+      }
+    }
+  }
+
+  service_config {
+    min_instance_count = 0
+    max_instance_count = 5
+    available_memory   = "256M"
+    timeout_seconds    = 540
+
+    environment_variables = {
+      PROJECT_ID              = var.project_id
+      BUCKET                  = google_storage_bucket.pipeline.name
+      FIRESTORE_DATABASE      = var.firestore_database
+      REGION                  = var.dataflow_region
+      STREAMING_TEMPLATE_PATH = "gs://${google_storage_bucket.pipeline.name}/templates/feedback-streaming.json"
+      SDK_CONTAINER_IMAGE     = "${var.region}-docker.pkg.dev/${var.project_id}/cloud-run-source-deploy/feedback-streaming:latest"
+    }
+
+    service_account_email = "${local.project_number}-compute@developer.gserviceaccount.com"
+  }
+
+  event_trigger {
+    trigger_region        = var.region
+    event_type            = "google.cloud.pubsub.topic.v1.messagePublished"
+    pubsub_topic          = google_pubsub_topic.session_ready.id
+    retry_policy          = "RETRY_POLICY_DO_NOT_RETRY"
+    service_account_email = "${local.project_number}-compute@developer.gserviceaccount.com"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_pubsub_topic.session_ready,
+    google_project_iam_member.compute_roles,
+  ]
+}
 
 # NOTE: Commented out until eventarc service account is provisioned.
 #resource "google_eventarc_trigger" "firestore_session" {

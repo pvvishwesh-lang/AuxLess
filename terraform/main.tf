@@ -293,12 +293,12 @@ resource "google_project_iam_member" "compute_roles" {
 # NOTE: Commented out until eventarc service account is provisioned.
 # Re-enable after running: gcloud services enable eventarc.googleapis.com
 # and waiting ~5 minutes for the service account to be created.
-resource "google_project_iam_member" "eventarc_invoker" {
-   project = var.project_id
-   role    = "roles/run.invoker"
-   member  = "serviceAccount:service-${local.project_number}@gcp-sa-eventarc.iam.gserviceaccount.com"
-   depends_on = [google_project_service.apis]
- }
+#resource "google_project_iam_member" "eventarc_invoker" {
+   #project = var.project_id
+   #role    = "roles/run.invoker"
+   #member  = "serviceAccount:service-${local.project_number}@gcp-sa-eventarc.iam.gserviceaccount.com"
+   #depends_on = [google_project_service.apis]
+ #}
 
 resource "google_secret_manager_secret_iam_member" "cloudbuild_secret_accessor" {
   for_each  = toset(local.all_secrets)
@@ -384,54 +384,54 @@ resource "google_cloud_run_v2_service" "auxless_api" {
 #}
 
 # NOTE: Commented out until eventarc service account is provisioned.
-resource "google_eventarc_trigger" "firestore_session" {
-   name     = "auxless-session-trigger"
-   location = var.firestore_location
-   matching_criteria {
-     attribute = "type"
-     value     = "google.cloud.firestore.document.v1.created"
-   }
-   matching_criteria {
-     attribute = "database"
-     value     = var.firestore_database
-   }
-   matching_criteria {
-     attribute = "document"
-     value     = "sessions/{sessionId}"
-     operator  = "match-path-pattern"
-   }
-   destination {
-     cloud_run_service {
-       service = "auxlessfunction"
-       region  = var.region
-       path    = "/"
-     }
-   }
-   service_account         = "${local.project_number}-compute@developer.gserviceaccount.com"
-   event_data_content_type = "application/protobuf"
-   depends_on = [
-     google_project_service.apis,
-     google_firestore_database.auxless,
-     google_project_iam_member.eventarc_invoker,
-   ]
- }
+#resource "google_eventarc_trigger" "firestore_session" {
+   #name     = "auxless-session-trigger"
+   #location = var.firestore_location
+   #matching_criteria {
+     #attribute = "type"
+     #value     = "google.cloud.firestore.document.v1.created"
+   #}
+   #matching_criteria {
+     #attribute = "database"
+     #value     = var.firestore_database
+   #}
+   #matching_criteria {
+     #attribute = "document"
+     #value     = "sessions/{sessionId}"
+     #operator  = "match-path-pattern"
+   #}
+   #destination {
+     #cloud_run_service {
+       #service = "auxlessfunction"
+       #region  = var.region
+       #path    = "/"
+     #}
+   #}
+   #service_account         = "${local.project_number}-compute@developer.gserviceaccount.com"
+   #event_data_content_type = "application/protobuf"
+   #depends_on = [
+     #google_project_service.apis,
+     #google_firestore_database.auxless,
+     #google_project_iam_member.eventarc_invoker,
+   #]
+ #}
 
 # NOTE: Cloud Build trigger is managed manually via GCP Console due to
 # GitHub App connection incompatibility with terraform google provider.
 # Trigger ID: 72f46029-0b2c-426d-be92-30cf6915f032
- resource "google_cloudbuild_trigger" "deploy" {
-   name     = "auxless-deploy"
-   location = "global"
-   github {
-     owner = var.github_owner
-     name  = var.github_repo
-     push {
-       branch = "^main$"
-     }
-   }
-   filename   = "cloudbuild.yaml"
-   depends_on = [google_project_service.apis]
- }
+ #resource "google_cloudbuild_trigger" "deploy" {
+   #name     = "auxless-deploy"
+   #location = "global"
+   #github {
+     #owner = var.github_owner
+     #name  = var.github_repo
+     #push {
+       #branch = "^main$"
+     #}
+   #}
+   #filename   = "cloudbuild.yaml"
+   #depends_on = [google_project_service.apis]
+ #}
 
 # ── Outputs ───────────────────────────────────────────────────────────────────
 

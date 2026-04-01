@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import base64
 import logging
 import functions_framework
@@ -17,35 +18,50 @@ def trigger_streaming_pipeline(cloud_event):
     except Exception as e:
         logger.error(f"Failed to decode Pub/Sub message: {e}")
         return
+
     logger.info(f"Launching streaming pipeline for session: {session_id}")
+
     project_id = os.environ["PROJECT_ID"]
     region     = os.environ.get("REGION", "us-central1")
     bucket     = os.environ["BUCKET"]
     template   = os.environ["STREAMING_TEMPLATE_PATH"]
-    dataflow   = build("dataflow", "v1b3")
+
+    dataflow = build("dataflow", "v1b3")
+
     body = {
         "launchParameter": {
-            "jobName":    f"feedback-streaming-{session_id[:10]}",
+            "jobName": f"feedback-streaming-{session_id[:10]}-{int(time.time())}",
             "parameters": {
-                "session_id":           session_id,
-                "input_subscription":   f"projects/{project_id}/subscriptions/feedback-events-sub",
-                "firestore_project":    project_id,
-                "firestore_database":   os.environ["FIRESTORE_DATABASE"],
-                "bucket":               bucket,
+                "session_id":         session_id,
+                "input_subscription": f"projects/{project_id}/subscriptions/feedback-events-sub",
+                "firestore_project":  project_id,
+                "firestore_database": os.environ["FIRESTORE_DATABASE"],
+                "bucket":             bucket,
             },
             "environment": {
-                "tempLocation":    f"gs://{bucket}/temp",
-                "stagingLocation": f"gs://{bucket}/staging",
+                "tempLocation":      f"gs://{bucket}/temp",
+                "stagingLocation":   f"gs://{bucket}/staging",
+                "sdkContainerImage": f"{os.environ.get('SDK_CONTAINER_IMAGE', '')}",
             },
             "containerSpecGcsPath": template
         }
     }
 
-    response = (
-        dataflow.projects()
-        .locations()
-        .flexTemplates()
-        .launch(projectId=project_id, location=region, body=body)
-        .execute()
-    )
-    logger.info(f"Dataflow streaming job launched: {response['job']['id']}")
+    if not body["launchParameter"]["environment"]["sdkContainerImage"]:
+        del body["launchParameter"]["environment"]["sdkContainerImage"]
+
+    try:
+        response = (
+            dataflow.projects()
+            .locations()
+            .flexTemplates()
+            .launch(projectId=project_id, location=region, body=body)
+            .execute()
+        )
+        logger.info(f"Dataflow streaming job launched: {response['job']['id']}")
+    except Exception as e:
+        if "already an active job" in str(e):
+            logger.info(f"Streaming job already running for session {session_id}, skipping.")
+        else:
+            logger.error(f"Failed to launch streaming job: {e}")
+            raise

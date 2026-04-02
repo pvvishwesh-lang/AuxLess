@@ -15,7 +15,6 @@ COLUMNS = [
     "trackTimeSeconds", "view_count", "like_count", "comment_count",
     "like_to_view_ratio", "comment_to_view_ratio"
 ]
-
 def sanitize_for_job_name(s: str) -> str:
     s = s.lower()
     s = re.sub(r"[^a-z0-9-]", "-", s)

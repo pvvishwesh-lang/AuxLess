@@ -42,7 +42,7 @@ def trigger_streaming_pipeline(cloud_event):
                 "tempLocation":      f"gs://{bucket}/temp",
                 "stagingLocation":   f"gs://{bucket}/staging",
                 "sdkContainerImage": f"{os.environ.get('SDK_CONTAINER_IMAGE', '')}",
-                "workerMachineType": "e2-standard-2",
+                "machineType": "e2-standard-2",
             },
             "containerSpecGcsPath": template
         }

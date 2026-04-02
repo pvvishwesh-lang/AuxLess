@@ -357,6 +357,10 @@ resource "google_cloud_run_v2_service" "auxless_api" {
         value = var.dataflow_region
       }
       env {
+        name  = "FEEDBACK_TOPIC"
+        value = "FeedbackTopic"
+      }
+      env {
         name  = "GRU_MODEL_PATH"
         value = "gs://${google_storage_bucket.ml_models.name}/models/gru_model.pt"
       }

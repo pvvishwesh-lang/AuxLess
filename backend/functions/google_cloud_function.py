@@ -38,7 +38,7 @@ def firestore_session_trigger(cloud_event):
 
     if not new_doc:
         return
-
+        
     new_fields = new_doc.fields
     new_status = new_fields.get("status").string_value if "status" in new_fields else None
 

@@ -1,6 +1,6 @@
 project_id         = "flash-aviary-491923-h1"
 region             = "europe-west1"
-dataflow_region    = "us-central1"
+dataflow_region    = "us-east1"
 firestore_location = "nam5"
 firestore_database = "auxless"
 github_owner       = "pvvishwesh-lang"

@@ -38,6 +38,7 @@ def run_pipeline_for_user(user_id: str,refresh_token: str,bucket: str,prefix_val
     unique_id = str(uuid.uuid4())[:4]
     options = PipelineOptions(["--setup_file=./setup.py"])
     gcp_options = options.view_as(GoogleCloudOptions)
+    worker_options = options.view_as(WorkerOptions)
     gcp_options.project = os.environ["PROJECT_ID"]
     gcp_options.job_name = (
         f"youtube-pipeline-{session_id[:10]}-"
@@ -47,7 +48,7 @@ def run_pipeline_for_user(user_id: str,refresh_token: str,bucket: str,prefix_val
     gcp_options.staging_location = f"gs://{bucket}/staging"
     gcp_options.temp_location = f"gs://{bucket}/temp"
     gcp_options.service_account_email = os.environ["SERVICE_ACCOUNT_EMAIL"]
-    gcp_options.machine_type = "e2-standard-2"
+    worker_options.machine_type = "e2-standard-2"
     options.view_as(StandardOptions).runner = "DataflowRunner"
     valid_gcs_prefix = f"gs://{bucket}/{prefix_valid}/{user_id}_valid"
     invalid_gcs_prefix = f"gs://{bucket}/{prefix_invalid}/{user_id}_invalid"

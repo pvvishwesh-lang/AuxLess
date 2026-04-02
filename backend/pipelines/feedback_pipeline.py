@@ -34,7 +34,6 @@ def run(argv=None):
 
     gcp_opts = options.view_as(GoogleCloudOptions)
     gcp_opts.project          = known_args.firestore_project
-    gcp_opts.region           = os.environ.get("DATAFLOW_REGION", "us-central1")
     gcp_opts.staging_location = f"gs://{known_args.bucket}/staging"
     gcp_opts.temp_location    = f"gs://{known_args.bucket}/temp"
 

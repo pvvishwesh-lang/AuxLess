@@ -6,6 +6,10 @@ terraform {
       version = "~>5.0"
     }
   }
+  backend "gcs" {
+    bucket = "flash-aviary-491923-h1-tfstate"
+    prefix = "terraform/state"
+  }
 }
 
 provider "google" {

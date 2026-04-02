@@ -3,6 +3,7 @@ name: Auto Merge
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, labeled]
 
 permissions:
   contents: write
@@ -17,3 +18,4 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           merge-method: squash
           squash-title: true
+          labels: automerge

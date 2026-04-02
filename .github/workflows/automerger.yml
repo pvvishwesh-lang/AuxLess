@@ -1,0 +1,19 @@
+name: Auto Merge
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: reitermarkus/automerge@v2.8.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          merge-method: squash
+          squash-title: true

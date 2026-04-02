@@ -51,18 +51,24 @@ def trigger_streaming_pipeline(cloud_event):
     if not body["launchParameter"]["environment"]["sdkContainerImage"]:
         del body["launchParameter"]["environment"]["sdkContainerImage"]
 
-    try:
-        response = (
-            dataflow.projects()
-            .locations()
-            .flexTemplates()
-            .launch(projectId=project_id, location=region, body=body)
-            .execute()
-        )
-        logger.info(f"Dataflow streaming job launched: {response['job']['id']}")
-    except Exception as e:
-        if "already an active job" in str(e):
-            logger.info(f"Streaming job already running for session {session_id}, skipping.")
-        else:
-            logger.error(f"Failed to launch streaming job: {e}")
-            raise
+    for attempt in range(3):
+        try:
+            response = (
+                dataflow.projects()
+                .locations()
+                .flexTemplates()
+                .launch(projectId=project_id, location=region, body=body)
+                .execute()
+            )
+            logger.info(f"Dataflow streaming job launched: {response['job']['id']}")
+            break
+        except Exception as e:
+            if "ZONE_RESOURCE_POOL_EXHAUSTED" in str(e) and attempt < 2:
+                logger.warning(f"Zone exhausted, retrying in 30s (attempt {attempt+1})")
+                time.sleep(30)
+            elif "already an active job" in str(e):
+                logger.info(f"Streaming job already running for session {session_id}, skipping.")
+                break
+            else:
+                logger.error(f"Failed to launch streaming job: {e}")
+                raise

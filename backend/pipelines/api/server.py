@@ -42,7 +42,7 @@ def _run_ml_session_safe(session_id: str):
 def _drain_streaming_job(project_id: str, session_id: str):
     from googleapiclient.discovery import build
     log = logging.getLogger(__name__)
-    region = "us-central1"
+    region = os.environ.get("DATAFLOW_REGION", "us-central1")
     dataflow = build("dataflow", "v1b3")
     try:
         jobs = dataflow.projects().locations().jobs().list(

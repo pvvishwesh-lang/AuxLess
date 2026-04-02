@@ -47,11 +47,11 @@ def _drain_streaming_job(project_id: str, session_id: str):
     try:
         jobs = dataflow.projects().locations().jobs().list(
             projectId=project_id,
-            location=region,
-            filter="ACTIVE"
+            location=region
         ).execute()
         for job in jobs.get("jobs", []):
-            if session_id[:10] in job.get("name", ""):
+            log.info(f"Checking job: {job.get('name')} state: {job.get('currentState')}")
+            if session_id[:10] in job.get("name", "") and job.get("currentState") == "JOB_STATE_RUNNING":
                 dataflow.projects().locations().jobs().update(
                     projectId=project_id,
                     location=region,

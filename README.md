@@ -12,10 +12,10 @@
 ![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
 ![Pytest](https://img.shields.io/badge/Pytest-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white)
 ![Slack](https://img.shields.io/badge/Slack-4A154B?style=for-the-badge&logo=slack&logoColor=white)
+![Terraform](https://img.shields.io/badge/Terraform-3776AB?style=for-the-badge&logo=terraform&logoColor=white)
 ![Pipelines](https://github.com/pvvishwesh-lang/AuxLess/actions/workflows/api_pipeline_testing.yml/badge.svg)
 ![Model](https://github.com/pvvishwesh-lang/AuxLess/actions/workflows/model_testing.yml/badge.svg)
 ![Frontend](https://github.com/pvvishwesh-lang/AuxLess/actions/workflows/frontend_testing.yml/badge.svg)
-![Terraform](https://img.shields.io/badge/Terraform-3776AB?style=for-the-badge&logo=terraform&logoColor=white)
 ## Party Music Recommendation System
 
 A real-time, multi user music recommendation system designed for social settings. The system aggregates playlist data from every single user, clusters the songs by genres and adapts playback using live user feedback.

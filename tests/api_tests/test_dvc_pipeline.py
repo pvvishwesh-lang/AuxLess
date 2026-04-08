@@ -31,7 +31,7 @@ def params(tmp_path, monkeypatch):
     monkeypatch.setenv("BQ_TABLE",            "test-project:dataset.table")
     monkeypatch.setenv("FIRESTORE_DATABASE",  "test-db")
 
-    raw = Path("params.yaml").read_text()
+    raw = Path("backend\pipelines\params.yaml").read_text()
     # Replace ${VAR} placeholders for testing
     import os, re
     resolved = re.sub(
@@ -44,7 +44,7 @@ def params(tmp_path, monkeypatch):
 
 @pytest.fixture()
 def dvc_yaml():
-    return yaml.safe_load(Path("dvc.yaml").read_text())
+    return yaml.safe_load(Path("backend\pipelines\dvc.yaml").read_text())
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +53,7 @@ def dvc_yaml():
 
 class TestDvcYaml:
     def test_file_exists(self):
-        assert Path("dvc.yaml").exists(), "dvc.yaml must exist"
+        assert Path("backend\pipelines\dvc.yaml").exists(), "dvc.yaml must exist"
 
     def test_has_streaming_pipeline_stage(self, dvc_yaml):
         assert "streaming_pipeline" in dvc_yaml["stages"]
@@ -91,7 +91,7 @@ class TestDvcYaml:
 
 class TestParamsYaml:
     def test_file_exists(self):
-        assert Path("params.yaml").exists(), "params.yaml must exist"
+        assert Path("backend\pipelines\params.yaml").exists(), "params.yaml must exist"
 
     def test_pipeline_section_exists(self, params):
         assert "pipeline" in params

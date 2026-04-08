@@ -1,4 +1,3 @@
-
 """
 Tests for DVC integration.
 
@@ -22,17 +21,16 @@ import yaml
 @pytest.fixture()
 def params(tmp_path, monkeypatch):
     """Load params.yaml with env-var placeholders substituted."""
-    monkeypatch.setenv("GCP_PROJECT_ID",      "test-project")
-    monkeypatch.setenv("GCP_REGION",          "us-central1")
-    monkeypatch.setenv("GCS_TEMP_LOCATION",   "gs://test/temp")
-    monkeypatch.setenv("GCS_STAGING_LOCATION","gs://test/staging")
-    monkeypatch.setenv("PUBSUB_TOPIC",        "projects/test-project/topics/test")
-    monkeypatch.setenv("GCS_RAW_EVENTS_PATH", "gs://test/raw")
-    monkeypatch.setenv("BQ_TABLE",            "test-project:dataset.table")
-    monkeypatch.setenv("FIRESTORE_DATABASE",  "test-db")
+    monkeypatch.setenv("GCP_PROJECT_ID",       "test-project")
+    monkeypatch.setenv("GCP_REGION",           "us-central1")
+    monkeypatch.setenv("GCS_TEMP_LOCATION",    "gs://test/temp")
+    monkeypatch.setenv("GCS_STAGING_LOCATION", "gs://test/staging")
+    monkeypatch.setenv("PUBSUB_TOPIC",         "projects/test-project/topics/test")
+    monkeypatch.setenv("GCS_RAW_EVENTS_PATH",  "gs://test/raw")
+    monkeypatch.setenv("BQ_TABLE",             "test-project:dataset.table")
+    monkeypatch.setenv("FIRESTORE_DATABASE",   "test-db")
 
-    raw = Path("backend\pipelines\params.yaml").read_text()
-    # Replace ${VAR} placeholders for testing
+    raw = Path("backend/pipelines/params.yaml").read_text()  # ✅ fixed
     import os, re
     resolved = re.sub(
         r"\$\{(\w+)\}",
@@ -44,7 +42,7 @@ def params(tmp_path, monkeypatch):
 
 @pytest.fixture()
 def dvc_yaml():
-    return yaml.safe_load(Path("backend\pipelines\dvc.yaml").read_text())
+    return yaml.safe_load(Path("backend/pipelines/dvc.yaml").read_text())  # ✅ fixed
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +51,7 @@ def dvc_yaml():
 
 class TestDvcYaml:
     def test_file_exists(self):
-        assert Path("backend\pipelines\dvc.yaml").exists(), "dvc.yaml must exist"
+        assert Path("backend/pipelines/dvc.yaml").exists(), "dvc.yaml must exist"  # ✅ fixed
 
     def test_has_streaming_pipeline_stage(self, dvc_yaml):
         assert "streaming_pipeline" in dvc_yaml["stages"]
@@ -91,7 +89,7 @@ class TestDvcYaml:
 
 class TestParamsYaml:
     def test_file_exists(self):
-        assert Path("backend\pipelines\params.yaml").exists(), "params.yaml must exist"
+        assert Path("backend/pipelines/params.yaml").exists(), "params.yaml must exist"  # ✅ fixed
 
     def test_pipeline_section_exists(self, params):
         assert "pipeline" in params
@@ -140,10 +138,9 @@ class TestDvcIgnore:
 class TestDvcSetupHelper:
     def test_ensure_metrics_dir_creates_dir(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        # Re-import with patched cwd
         import importlib, sys
-        sys.path.insert(0, str(Path(__file__).parent.parent))
-        import dvc_setup
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent))  # ✅ already correct
+        from backend.pipelines import dvc_setup
         importlib.reload(dvc_setup)
 
         dvc_setup.ensure_metrics_dir()
@@ -154,8 +151,8 @@ class TestDvcSetupHelper:
     def test_metrics_stub_is_valid_json(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         import importlib, sys
-        sys.path.insert(0, str(Path(__file__).parent.parent))
-        import dvc_setup
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent))  # ✅ fixed
+        from backend.pipelines import dvc_setup                        # ✅ fixed
         importlib.reload(dvc_setup)
 
         dvc_setup.ensure_metrics_dir()
@@ -167,23 +164,22 @@ class TestDvcSetupHelper:
         (tmp_path / ".dvc").mkdir()
 
         import importlib, sys
-        sys.path.insert(0, str(Path(__file__).parent.parent))
-        import dvc_setup
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent))  # ✅ fixed
+        from backend.pipelines import dvc_setup                        # ✅ fixed
         importlib.reload(dvc_setup)
 
-        # Should not call subprocess — .dvc already exists
-        with patch("dvc_setup._run") as mock_run:
+        with patch("backend.pipelines.dvc_setup._run") as mock_run:
             dvc_setup.init_dvc()
             mock_run.assert_not_called()
 
     def test_repro_calls_dvc_repro(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         import importlib, sys
-        sys.path.insert(0, str(Path(__file__).parent.parent))
-        import dvc_setup
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent))  # ✅ fixed
+        from backend.pipelines import dvc_setup                        # ✅ fixed
         importlib.reload(dvc_setup)
 
-        with patch("dvc_setup._run") as mock_run:
+        with patch("backend.pipelines.dvc_setup._run") as mock_run:
             dvc_setup.repro()
             calls = [c.args[0] for c in mock_run.call_args_list]
             assert ["dvc", "repro"] in calls
@@ -191,11 +187,11 @@ class TestDvcSetupHelper:
     def test_show_metrics_calls_dvc_metrics(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         import importlib, sys
-        sys.path.insert(0, str(Path(__file__).parent.parent))
-        import dvc_setup
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent))  # ✅ fixed
+        from backend.pipelines import dvc_setup                        # ✅ fixed
         importlib.reload(dvc_setup)
 
-        with patch("dvc_setup._run") as mock_run:
+        with patch("backend.pipelines.dvc_setup._run") as mock_run:
             dvc_setup.show_metrics()
             calls = [c.args[0] for c in mock_run.call_args_list]
             assert ["dvc", "metrics", "show"] in calls

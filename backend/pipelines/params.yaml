@@ -1,0 +1,22 @@
+
+pipeline:
+  window_size_seconds: 60
+  runner: DataflowRunner
+  allowed_lateness_seconds: 30
+  late_trigger_delay_seconds: 30
+  accumulation_mode: ACCUMULATING
+  num_shards: 1
+
+gcp:
+  project_id: ${GCP_PROJECT_ID}
+  region: ${GCP_REGION}
+  temp_location: ${GCS_TEMP_LOCATION}
+  staging_location: ${GCS_STAGING_LOCATION}
+
+pubsub:
+  topic: ${PUBSUB_TOPIC}
+
+storage:
+  gcs_raw_events_path: ${GCS_RAW_EVENTS_PATH}
+  bq_table: ${BQ_TABLE}
+  firestore_database: ${FIRESTORE_DATABASE}

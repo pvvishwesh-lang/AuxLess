@@ -1,3 +1,17 @@
-# Add patterns of files dvc should ignore, which could improve
-# the performance. Learn more at
-# https://dvc.org/doc/user-guide/dvcignore
+
+# Beam runner temp files
+/tmp/
+*.pyc
+__pycache__/
+
+# Dataflow staging artifacts
+beam-temp-*
+dataflow-staging-*
+
+# GCS-backed outputs (tracked externally via BQ / GCS, not DVC cache)
+*.jsonl
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage

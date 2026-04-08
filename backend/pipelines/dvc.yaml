@@ -1,0 +1,21 @@
+
+stages:
+  streaming_pipeline:
+    cmd: python -m backend.pipelines.run_pipeline
+    params:
+      - params.yaml:
+          - pipeline.window_size_seconds
+          - pipeline.runner
+          - gcp.project_id
+          - gcp.region
+    deps:
+      - backend/pipelines/run_pipeline.py
+      - backend/pipelines/feedback_processor.py
+    metrics:
+      - metrics/pipeline_metrics.json:
+          cache: false
+    plots:
+      - metrics/completion_rate_over_time.csv:
+          cache: false
+          x: window_start
+          y: completion_rate

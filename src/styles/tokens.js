@@ -1,0 +1,18 @@
+export const T = {
+  bg:       '#08080F',
+  surface:  '#0F0F1A',
+  card:     '#13131F',
+  cardB:    '#1A1A2A',
+  border:   'rgba(255,255,255,0.07)',
+  borderH:  'rgba(255,255,255,0.15)',
+  green:    '#1DB954',
+  greenLo:  'rgba(29,185,84,0.12)',
+  greenMid: 'rgba(29,185,84,0.25)',
+  purple:   '#7C3AED',
+  purpleLo: 'rgba(124,58,237,0.12)',
+  pink:     '#EC4899',
+  amber:    '#F59E0B',
+  text:     '#EEEEFF',
+  muted:    'rgba(238,238,255,0.45)',
+  dim:      'rgba(238,238,255,0.18)',
+};

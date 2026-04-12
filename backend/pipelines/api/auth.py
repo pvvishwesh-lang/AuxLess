@@ -20,7 +20,6 @@ class GoogleAuthClient:
             "refresh_token": self.refresh_token,
             "client_id":     self.client_id,
             "client_secret": self.client_secret,
-            "redirect_uri":  self.redirect_uri,
             "grant_type":    "refresh_token"
         }
         res = requests.post(self.token_uri, data=payload, timeout=10)

@@ -17,8 +17,7 @@ export const getArtistImage = async (artistName) => {
     if (data.results?.length > 0) {
       // iTunes gives 30x30 — replace with 200x200
       const img = data.results[0].artworkUrl30
-        ?.replace('30x30', '200x200')
-        ?.replace('bb.jpg', 'bb.jpg');
+        ?.replace('30x30', '200x200');
 
       cache[artistName] = img || null;
       return img || null;

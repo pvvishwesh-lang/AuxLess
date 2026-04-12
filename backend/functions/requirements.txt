@@ -4,3 +4,7 @@ google-cloud-firestore
 google-cloud-functions
 google-events
 google-cloud-pubsub
+google-api-python-client
+google-auth
+proto-plus
+google-events

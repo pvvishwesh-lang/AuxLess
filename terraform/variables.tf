@@ -43,17 +43,12 @@ variable "secret_names" {
   description = "List of Secrets to create in Secret Manager"
   type        = list(string)
   default = [
-    "CLIENT_ID",
-    "CLIENT_SECRET",
-    "TOKEN_URI",
     "AUTH_URI",
     "auth_provider_x509_cert_url",
-    "REDIRECT_URIS",
     "PROJECT_ID",
     "FIRESTORE_DATABASE",
     "BUCKET",
     "SERVICE_ACCOUNT_EMAIL",
-    "SLACK_WEBHOOK_URL",
     "SESSION_READY_TOPIC",
   ]
 }

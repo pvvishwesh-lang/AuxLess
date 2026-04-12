@@ -43,17 +43,8 @@ def fetch_all_embeddings(client: bigquery.Client) -> pd.DataFrame:
             embedding
         FROM `{TABLE_REF}`
     """
-    rows = []
-    for row in client.query(query).result():
-        rows.append({
-            "video_id":    row.video_id,
-            "track_title": row.track_title,
-            "artist_name": row.artist_name,
-            "genre":       row.genre,
-            "embedding":   np.array(row.embedding, dtype=np.float32),
-        })
-
-    df = pd.DataFrame(rows)
+    df = client.query(query).result().to_dataframe(dtypes={"embedding": object})
+    df["embedding"] = df["embedding"].apply(lambda x: np.array(x, dtype=np.float32))
     logger.info(f"Fetched {len(df)} songs from BigQuery.")
     return df
 

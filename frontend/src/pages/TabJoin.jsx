@@ -121,7 +121,7 @@ export default function TabJoin({ user, onEnterRoom }) {
         <input
           value={code}
           onChange={e => { setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '')); setError(''); }}
-          placeholder="AUX-XXXXXXXX" maxLength={12}
+          placeholder="AUX-XXXXXXXX" maxLength={13}
           onKeyDown={e => e.key === 'Enter' && join()}
           style={{ width: '100%', padding: '14px 0', textAlign: 'center',
             background: 'rgba(255,255,255,0.04)',

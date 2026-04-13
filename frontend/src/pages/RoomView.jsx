@@ -20,7 +20,7 @@ import { db, mlDb } from '../config/firebase';
 import {
   collection, doc, onSnapshot,
   updateDoc, increment, addDoc,
-  serverTimestamp, getDoc,
+  serverTimestamp, setDoc, getDoc,
 } from 'firebase/firestore';
 
 const WEIGHTS           = { like: 2, dislike: -2, skip: -0.5, replay: 1.5, play: 0, complete: 0.5 };
@@ -454,14 +454,7 @@ export default function RoomView({ roomId, user, onLeave }) {
         <div style={{ display:'flex', alignItems:'center', gap:9 }}>
           <div style={{ width:28, height:28, borderRadius:8,
             background:`linear-gradient(135deg,${T.green},${T.purple})`,
-            display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <rect x="4" y="8" width="3" height="10" rx="1.5" fill="white"/>
-              <rect x="9" y="4" width="3" height="14" rx="1.5" fill="white"/>
-              <rect x="14" y="6" width="3" height="12" rx="1.5" fill="white"/>
-              <rect x="19" y="9" width="3" height="8" rx="1.5" fill="white"/>
-            </svg>
-          </div>
+            display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>♫</div>
           <span style={{ fontWeight:900, fontSize:15, letterSpacing:'-0.4px' }}>AuxLess</span>
           {isHost && <span style={{ padding:'2px 8px', borderRadius:999, background:T.purpleLo,
             border:`1px solid ${T.purple}44`, fontSize:10, fontWeight:700, color:T.purple }}>👑 HOST</span>}

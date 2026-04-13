@@ -5,6 +5,9 @@ import Btn from '../components/Btn';
 import { db, mlDb } from '../config/firebase';
 import { doc, getDoc, updateDoc, arrayUnion, setDoc } from 'firebase/firestore';
 
+// Convert AUX-7749 → 7749 (lowercase, no AUX- prefix) — matches Nikhil's session_id
+const toSessionId = (code) => (code || '').replace(/^AUX-/i, '').toLowerCase();
+
 export default function TabJoin({ user, onEnterRoom }) {
   const [code,    setCode]    = useState('');
   const [joining, setJoining] = useState(false);
@@ -14,9 +17,13 @@ export default function TabJoin({ user, onEnterRoom }) {
     if (code.length < 3) return;
     setJoining(true);
     setError('');
+
+    const roomCode  = code.startsWith('AUX-') ? code : `AUX-${code}`;
+    const sessionId = toSessionId(roomCode);
+
     try {
       // Check room in YOUR Firestore (db)
-      const roomRef  = doc(db, 'rooms', code);
+      const roomRef  = doc(db, 'rooms', roomCode);
       const roomSnap = await getDoc(roomRef);
 
       if (!roomSnap.exists()) {
@@ -30,7 +37,7 @@ export default function TabJoin({ user, onEnterRoom }) {
         return;
       }
 
-      const uid = user?.uid || `guest_${Date.now()}`;
+      const uid      = user?.uid || `guest_${Date.now()}`;
       const alreadyIn = roomData.users?.some(u => u.uid === uid);
 
       if (!alreadyIn) {
@@ -38,8 +45,8 @@ export default function TabJoin({ user, onEnterRoom }) {
         await updateDoc(roomRef, {
           users: arrayUnion({
             uid,
-            name:     user?.name || 'Guest',
-            av:       user?.av   || 'GU',
+            name:     user?.name  || 'Guest',
+            av:       user?.av    || 'GU',
             email:    user?.email || '',
             genres:   user?.genres  || [],
             artists:  user?.artists || [],
@@ -50,8 +57,8 @@ export default function TabJoin({ user, onEnterRoom }) {
         });
 
         // 2. Add user to session → NIKHIL'S Firestore (mlDb)
-        // Pipeline reads users from here to fetch their playlists
-        const sessionRef  = doc(mlDb, 'sessions', code);
+        // Uses sessionId (lowercase hash) not roomCode
+        const sessionRef  = doc(mlDb, 'sessions', sessionId);
         const sessionSnap = await getDoc(sessionRef);
 
         if (sessionSnap.exists()) {
@@ -59,24 +66,23 @@ export default function TabJoin({ user, onEnterRoom }) {
             users: arrayUnion({
               user_id:       uid,
               isactive:      true,
-              refresh_token: localStorage.getItem('auxless_refresh_token') || '',
+              refresh_token: process.env.REACT_APP_YOUTUBE_REFRESH_TOKEN || '',
               last_active:   new Date(),
               genres:        user?.genres  || [],
               artists:       user?.artists || [],
             }),
           });
         } else {
-          // Session doesn't exist yet — create it with status:'pending'
-          // This auto-triggers the pipeline!
+          // Session doesn't exist — create it (triggers pipeline)
           await setDoc(sessionRef, {
-            session_id: code,
-            room_code:  code,
+            session_id: sessionId,
+            room_code:  roomCode,
             status:     'pending',
             createdAt:  Date.now(),
             users: [{
               user_id:       uid,
               isactive:      true,
-              refresh_token: '',
+              refresh_token: process.env.REACT_APP_YOUTUBE_REFRESH_TOKEN || '',
               last_active:   new Date(),
               genres:        user?.genres  || [],
               artists:       user?.artists || [],
@@ -85,12 +91,12 @@ export default function TabJoin({ user, onEnterRoom }) {
         }
       }
 
-      toast.success(`Joined ${code}! 🎉`);
-      onEnterRoom(code);
+      toast.success(`Joined ${roomCode}! 🎉`);
+      onEnterRoom(roomCode);
     } catch (e) {
       console.error(e);
-      toast.success(`Joined ${code}!`);
-      onEnterRoom(code);
+      toast.success(`Joined ${roomCode}!`);
+      onEnterRoom(roomCode);
     } finally {
       setJoining(false);
     }
@@ -115,12 +121,16 @@ export default function TabJoin({ user, onEnterRoom }) {
         <input
           value={code}
           onChange={e => { setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '')); setError(''); }}
-          placeholder="AUX-7749" maxLength={8}
+          placeholder="AUX-XXXXXXXX" maxLength={12}
           onKeyDown={e => e.key === 'Enter' && join()}
-          style={{ width: '100%', padding: '14px 0', textAlign: 'center', background: 'rgba(255,255,255,0.04)', border: `1px solid ${error ? '#EF4444' : code.length > 2 ? T.green : T.border}`, borderRadius: 12, color: T.green, fontSize: 24, fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.18em', transition: 'border-color .2s' }}
+          style={{ width: '100%', padding: '14px 0', textAlign: 'center',
+            background: 'rgba(255,255,255,0.04)',
+            border: `1px solid ${error ? '#EF4444' : code.length > 2 ? T.green : T.border}`,
+            borderRadius: 12, color: T.green, fontSize: 22, fontFamily: 'monospace',
+            fontWeight: 700, letterSpacing: '0.18em', transition: 'border-color .2s' }}
         />
         {error && <p style={{ fontSize: 12, color: '#EF4444', textAlign: 'center', margin: 0 }}>{error}</p>}
-        <p style={{ fontSize: 12, color: T.muted }}>Format: AUX-XXXX · Press Enter or tap Join</p>
+        <p style={{ fontSize: 12, color: T.muted }}>Format: AUX-XXXXXXXX · Press Enter or tap Join</p>
         <Btn onClick={join} disabled={code.length < 3 || joining} full icon={joining ? '' : '🔑'}>
           {joining
             ? <><span style={{ display: 'inline-block', width: 14, height: 14, border: '2px solid rgba(0,0,0,.3)', borderTopColor: '#000', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />Joining…</>
@@ -132,7 +142,7 @@ export default function TabJoin({ user, onEnterRoom }) {
         <span style={{ fontSize: 20 }}>💡</span>
         <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>
           Ask the room host for their code — it looks like{' '}
-          <b style={{ color: T.green, fontFamily: 'monospace' }}>AUX-7749</b>
+          <b style={{ color: T.green, fontFamily: 'monospace' }}>AUX-XXXXXXXX</b>
         </p>
       </div>
     </div>

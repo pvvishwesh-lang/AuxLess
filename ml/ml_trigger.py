@@ -43,13 +43,16 @@ from ml.recommendation.config import (
     REFRESH_THRESHOLD,
     TOP_N,
 )
+# ── Monitoring imports ────────────────────────────────────────────────────────
+from ml.recommendation.firestore_monitoring import MonitoringWriter   # ADD
+from ml.evaluation.model_bias import evaluate as evaluate_bias        # ADD
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 # ── Recommendation batch generator ───────────────────────────────────────────
-def _generate_and_write_batch(state, batch_number: int):
+def _generate_and_write_batch(state, batch_number: int, monitoring_writer: MonitoringWriter):  # ADD monitoring_writer param
     """
     Runs one recommendation cycle and writes results to Firestore queue.
 
@@ -58,6 +61,11 @@ def _generate_and_write_batch(state, batch_number: int):
     no override needed.
 
     Writes to: sessions/{session_id}/recommendations/{rank}
+
+    monitoring_writer is used to write a bias snapshot after each batch.
+    The rec snapshot (per-song CBF/CF/GRU scores) is written inside
+    recommend_next_song() in ml/recommendation/main.py where the full
+    scored list is available.
     """
     logger.info(
         f"Generating batch {batch_number} "
@@ -75,9 +83,45 @@ def _generate_and_write_batch(state, batch_number: int):
         f"Top song: '{top_song.get('track_title', 'unknown')}'"
     )
 
+    # ── Bias snapshot after every batch ──────────────────────────────────────
+    # recommend_next_song() writes the rec snapshot (CBF/CF/GRU scores) from
+    # inside main.py where the full scored list exists. Bias evaluation runs
+    # here because state.catalog_df (the BigQuery catalog) is accessible and
+    # we want bias checked against every batch, not just the first.
+    try:
+        # state.last_batch_songs is set by recommend_next_song() in main.py
+        # It holds the list of dicts for the 30 songs just recommended.
+        # See Step 2 (main.py wiring) for where this is assigned.
+        last_batch = getattr(state, "last_batch_songs", None)
+        if last_batch and hasattr(state, "catalog_df"):
+            bias_result = evaluate_bias(
+                recommendations=last_batch,
+                catalog_df=state.catalog_df,
+                score_column="final_score",
+            )
+            monitoring_writer.write_bias_snapshot(bias_result)
+            if bias_result["overall_bias_detected"]:
+                logger.warning(
+                    "Bias detected in batch %d for session %s: %s",
+                    batch_number,
+                    state.session_id,
+                    bias_result["mitigation_suggestions"],
+                )
+        else:
+            logger.debug(
+                "Skipping bias snapshot — state.last_batch_songs not set yet. "
+                "Wire recommend_next_song() in main.py to set it."
+            )
+    except Exception as exc:
+        # Bias evaluation must never crash a live session
+        logger.error(
+            "Bias snapshot write failed (non-critical) batch %d: %s",
+            batch_number, exc,
+        )
+
 
 # ── Refresh watcher ───────────────────────────────────────────────────────────
-def _watch_and_refresh(state):
+def _watch_and_refresh(state, monitoring_writer: MonitoringWriter):  # ADD monitoring_writer param
     """
     Runs in a background thread for the duration of the session.
     Polls Firestore songs_played_count every 10 seconds.
@@ -117,7 +161,7 @@ def _watch_and_refresh(state):
                 f"threshold: {next_threshold}"
             )
             update_last_refreshed_at(db, session_id, songs_played)
-            _generate_and_write_batch(state, batch_number)
+            _generate_and_write_batch(state, batch_number, monitoring_writer)  # PASS monitoring_writer
             batch_number += 1
 
 
@@ -189,11 +233,18 @@ def _run_ml_session(session_id: str):
         # loads BigQuery catalog, GRU model, session users
         state = initialize_session(session_id)
 
+        # ── Initialise MonitoringWriter once per session ──────────────────
+        # state.db is the Firestore client set up by initialize_session().
+        # One writer instance is shared across all batches for this session.
+        monitoring_writer        = MonitoringWriter(state.db, session_id)
+        state.monitoring_writer  = monitoring_writer   # wire into state so recommend_next_song can call write_rec_snapshot
+        logger.info("MonitoringWriter initialised for session %s", session_id)
+
         # step 3: generate first batch immediately
         logger.info(
             "Generating initial recommendation batch (songs 1-30)..."
         )
-        _generate_and_write_batch(state, batch_number=1)
+        _generate_and_write_batch(state, batch_number=1, monitoring_writer=monitoring_writer)  # PASS monitoring_writer
 
         # mark first refresh done at song count 0
         update_last_refreshed_at(state.db, session_id, 0)
@@ -201,7 +252,7 @@ def _run_ml_session(session_id: str):
         # step 4: start background refresh watcher
         watcher = threading.Thread(
             target=_watch_and_refresh,
-            args=(state,),
+            args=(state, monitoring_writer),   # PASS monitoring_writer
             daemon=True
         )
         watcher.start()

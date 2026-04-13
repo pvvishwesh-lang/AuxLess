@@ -284,6 +284,91 @@ def generate_bias_report(
     )
     return report
 
+def evaluate(
+    recommendations: list[dict],
+    catalog_df: pd.DataFrame,
+    score_column: str = "final_score",
+) -> dict:
+    """
+    Adapter called from ml_trigger.py. Converts the recommendation engine's
+    list-of-dicts into DataFrames and calls generate_bias_report().
+
+    Args:
+        recommendations: list of song dicts with keys:
+                         video_id, title, artist, genre,
+                         popularity_score, final_score,
+                         cbf_score, cf_score, gru_score
+        catalog_df:      the BigQuery catalog DataFrame already loaded in
+                         Phase 2 of _run_ml_session() — pass it through,
+                         do not re-fetch.
+        score_column:    column to use for disparity check. Default: 'final_score'
+
+    Returns:
+        Same nested dict as generate_bias_report(). Never raises.
+    """
+    if not recommendations:
+        logger.warning("evaluate() called with empty recommendations. Returning default.")
+        return _empty_bias_report()
+
+    try:
+        recommendations_df = pd.DataFrame(recommendations)
+
+        if "genre" not in recommendations_df.columns:
+            recommendations_df["genre"] = "unknown"
+        else:
+            recommendations_df["genre"] = recommendations_df["genre"].fillna("unknown")
+
+        if "popularity_score" not in recommendations_df.columns:
+            recommendations_df["popularity_score"] = recommendations_df.get(
+                "final_score", pd.Series(dtype=float)
+            )
+
+        if score_column not in recommendations_df.columns:
+            logger.warning(
+                f"score_column '{score_column}' not found. "
+                f"Available: {list(recommendations_df.columns)}"
+            )
+            score_cols = [c for c in recommendations_df.columns if "score" in c.lower()]
+            score_column = score_cols[0] if score_cols else "final_score"
+            if score_column not in recommendations_df.columns:
+                recommendations_df[score_column] = 0.0
+
+        return generate_bias_report(recommendations_df, catalog_df, score_column)
+
+    except Exception as exc:
+        logger.error("evaluate() failed: %s", exc, exc_info=True)
+        return _empty_bias_report()
+
+
+def _empty_bias_report() -> dict:
+    """Safe fallback with same shape as generate_bias_report()."""
+    return {
+        "genre_representation": {
+            "recommendation_proportions": {},
+            "catalog_proportions": {},
+            "deviations": {},
+            "over_represented": [],
+            "under_represented": [],
+            "recommendation_entropy": 0.0,
+            "catalog_entropy": 0.0,
+            "entropy_ratio": 1.0,
+            "genre_bias_detected": False,
+        },
+        "popularity_bias": {
+            "popularity_bias_detected": False,
+            "reason": "evaluation_failed",
+        },
+        "score_disparity": {
+            "per_genre_scores": {},
+            "max_score_disparity": 0.0,
+            "disparity_threshold": SCORE_DISPARITY_THRESHOLD,
+            "score_disparity_detected": False,
+        },
+        "overall_bias_detected": False,
+        "recommendation_count": 0,
+        "catalog_count": 0,
+        "mitigation_suggestions": ["Bias evaluation unavailable — check logs."],
+    }
 
 # ── Local testing ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":

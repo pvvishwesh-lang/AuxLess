@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auxless · ML Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:       #f9f9f8;
+    --surface:  #ffffff;
+    --surface2: #f4f3f0;
+    --border:   rgba(0,0,0,0.1);
+    --text:     #1a1a18;
+    --muted:    #6b6b67;
+    --hint:     #9d9d98;
+    --teal:     #1D9E75;
+    --teal-lt:  #E1F5EE;
+    --purple:   #7F77DD;
+    --purp-lt:  #EEEDFE;
+    --coral:    #D85A30;
+    --coral-lt: #FAECE7;
+    --amber:    #BA7517;
+    --amber-lt: #FAEEDA;
+    --red:      #A32D2D;
+    --red-lt:   #FCEBEB;
+    --blue:     #185FA5;
+    --blue-lt:  #E6F1FB;
+    --green:    #3B6D11;
+    --green-lt: #EAF3DE;
+    --r-md:     8px;
+    --r-lg:     12px;
+    --r-xl:     16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:       #1a1a18;
+      --surface:  #232320;
+      --surface2: #2c2c2a;
+      --border:   rgba(255,255,255,0.1);
+      --text:     #f0efe8;
+      --muted:    #a8a8a2;
+      --hint:     #6b6b67;
+      --teal-lt:  #04342C;
+      --purp-lt:  #26215C;
+      --coral-lt: #4A1B0C;
+      --amber-lt: #412402;
+      --red-lt:   #501313;
+      --blue-lt:  #042C53;
+      --green-lt: #173404;
+    }
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+  a { color: var(--blue); }
+
+  /* Layout */
+  .shell { max-width: 1280px; margin: 0 auto; padding: 0 20px 40px; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 0 20px; border-bottom: 0.5px solid var(--border); margin-bottom: 20px; }
+  .topbar-left { display: flex; align-items: center; gap: 12px; }
+  .logo { font-size: 16px; font-weight: 600; letter-spacing: -0.02em; }
+  .session-id { font-size: 12px; color: var(--muted); font-family: monospace; background: var(--surface2); padding: 3px 8px; border-radius: var(--r-md); }
+  .topbar-right { display: flex; align-items: center; gap: 10px; }
+  .live-badge { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--teal); }
+  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--teal); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
+  .last-updated { font-size: 11px; color: var(--hint); }
+
+  .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-bottom: 20px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .grid-3 { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  @media(max-width:900px) { .grid-4{grid-template-columns:1fr 1fr} .grid-2,.grid-3{grid-template-columns:1fr} }
+
+  /* Cards */
+  .card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--r-lg); padding: 16px 18px; }
+  .card-title { font-size: 11px; font-weight: 500; color: var(--hint); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 12px; }
+
+  /* Metric cards */
+  .metric { background: var(--surface2); border-radius: var(--r-md); padding: 14px 16px; }
+  .metric-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .metric-value { font-size: 26px; font-weight: 500; line-height: 1.1; }
+  .metric-sub { font-size: 11px; color: var(--hint); margin-top: 3px; }
+
+  /* Phase / weight strip */
+  .weight-strip { display: flex; height: 10px; border-radius: 5px; overflow: hidden; gap: 2px; margin: 8px 0 10px; }
+  .ws-seg { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+
+  /* Pills */
+  .pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 20px; }
+  .pill-teal   { background: var(--teal-lt);   color: var(--teal); }
+  .pill-purple { background: var(--purp-lt);   color: var(--purple); }
+  .pill-coral  { background: var(--coral-lt);  color: var(--coral); }
+  .pill-amber  { background: var(--amber-lt);  color: var(--amber); }
+  .pill-red    { background: var(--red-lt);    color: var(--red); }
+  .pill-blue   { background: var(--blue-lt);   color: var(--blue); }
+  .pill-green  { background: var(--green-lt);  color: var(--green); }
+  .pill-gray   { background: var(--surface2);  color: var(--muted); }
+
+  /* Feedback bar */
+  .fb-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .fb-label { font-size: 12px; color: var(--muted); min-width: 56px; }
+  .fb-track { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; }
+  .fb-fill { height: 6px; border-radius: 3px; transition: width 0.5s; }
+  .fb-count { font-size: 12px; color: var(--hint); min-width: 24px; text-align: right; }
+
+  /* Rec inspector */
+  .rec-song { padding: 9px 0; border-bottom: 0.5px solid var(--border); }
+  .rec-song:last-child { border-bottom: none; }
+  .rec-song-header { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+  .rec-rank { font-size: 12px; color: var(--hint); min-width: 18px; text-align: right; }
+  .rec-title { font-size: 13px; font-weight: 500; flex: 1; }
+  .rec-final { font-size: 13px; font-weight: 500; color: var(--teal); }
+  .rec-meta { font-size: 11px; color: var(--muted); margin-left: 26px; margin-bottom: 5px; }
+  .score-bar-row { display: flex; align-items: center; gap: 6px; margin-left: 26px; }
+  .sb-label { font-size: 10px; color: var(--hint); min-width: 26px; }
+  .sb-track { flex: 1; height: 5px; background: var(--surface2); border-radius: 3px; }
+  .sb-fill { height: 5px; border-radius: 3px; transition: width 0.4s; }
+  .sb-val { font-size: 10px; color: var(--muted); min-width: 32px; text-align: right; }
+
+  /* Bias monitor */
+  .bias-check { display: flex; align-items: center; padding: 8px 0; border-bottom: 0.5px solid var(--border); gap: 10px; }
+  .bias-check:last-child { border-bottom: none; }
+  .bias-check-label { font-size: 12px; min-width: 130px; }
+  .bias-track { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; }
+  .bias-fill { height: 6px; border-radius: 3px; transition: width 0.5s, background 0.4s; }
+  .bias-val { font-size: 12px; font-weight: 500; min-width: 44px; text-align: right; }
+  .flag-list { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px; }
+
+  /* Genre distribution */
+  .genre-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .genre-name { font-size: 12px; color: var(--muted); min-width: 90px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .genre-track { flex: 1; height: 7px; background: var(--surface2); border-radius: 4px; }
+  .genre-fill { height: 7px; border-radius: 4px; transition: width 0.5s; }
+  .genre-pct { font-size: 11px; color: var(--hint); min-width: 34px; text-align: right; }
+
+  /* Chart wrapper */
+  .chart-wrap { position: relative; width: 100%; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 2px; margin-bottom: 14px; border-bottom: 0.5px solid var(--border); }
+  .tab { padding: 7px 14px; font-size: 12px; cursor: pointer; border: none; background: none; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -0.5px; font-family: inherit; }
+  .tab.active { color: var(--text); border-bottom-color: var(--text); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Phase timeline */
+  .phase-tl { display: flex; gap: 0; margin: 4px 0 12px; }
+  .phase-seg { flex: 1; padding: 6px 8px; font-size: 10px; text-align: center; border: 0.5px solid var(--border); background: var(--surface2); }
+  .phase-seg:first-child { border-radius: var(--r-md) 0 0 var(--r-md); }
+  .phase-seg:last-child  { border-radius: 0 var(--r-md) var(--r-md) 0; }
+  .phase-seg.current { background: var(--purp-lt); color: var(--purple); border-color: var(--purple); font-weight: 500; }
+
+  /* Mitigation box */
+  .mitigation { background: var(--amber-lt); border: 0.5px solid var(--amber); border-radius: var(--r-md); padding: 10px 12px; margin-top: 10px; }
+  .mitigation-title { font-size: 11px; font-weight: 500; color: var(--amber); margin-bottom: 5px; }
+  .mitigation ul { padding-left: 16px; }
+  .mitigation li { font-size: 12px; color: var(--amber); margin-bottom: 3px; }
+
+  /* Error state */
+  .err-banner { background: var(--red-lt); border: 0.5px solid var(--red); border-radius: var(--r-md); padding: 10px 14px; font-size: 13px; color: var(--red); margin-bottom: 16px; display: none; }
+  .section-sep { font-size: 11px; font-weight: 500; color: var(--hint); letter-spacing: 0.05em; text-transform: uppercase; margin: 24px 0 12px; padding-bottom: 6px; border-bottom: 0.5px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <div class="topbar">
+    <div class="topbar-left">
+      <span class="logo">Auxless</span>
+      <span style="color:var(--hint);">/</span>
+      <span style="font-size:13px;color:var(--muted);">ML Monitor</span>
+      <span class="session-id" id="sessionIdLabel">__SESSION_ID__</span>
+    </div>
+    <div class="topbar-right">
+      <div class="live-badge"><div class="live-dot"></div>Live</div>
+      <span class="last-updated" id="lastUpdated">—</span>
+    </div>
+  </div>
+
+  <div class="err-banner" id="errBanner"></div>
+
+  <!-- ── SECTION 1: SESSION STATE ─────────────────────────── -->
+  <div class="section-sep">Session state</div>
+
+  <div class="grid-4" id="metricCards">
+    <div class="metric"><div class="metric-label">Songs played</div><div class="metric-value" id="mSongsPlayed">—</div><div class="metric-sub">this session</div></div>
+    <div class="metric"><div class="metric-label">Active users</div><div class="metric-value" id="mUsers">—</div><div class="metric-sub">in room</div></div>
+    <div class="metric"><div class="metric-label">Avg play time</div><div class="metric-value" id="mAvgPlay">—</div><div class="metric-sub">seconds per song</div></div>
+    <div class="metric"><div class="metric-label">Session status</div><div class="metric-value" id="mStatus" style="font-size:16px;margin-top:4px;">—</div><div class="metric-sub" id="mStatusSub">—</div></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Phase &amp; hybrid weights</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <span id="phaseLabel" style="font-size:14px;font-weight:500;">—</span>
+        <span id="phasePill" class="pill pill-gray">—</span>
+      </div>
+      <div class="phase-tl">
+        <div class="phase-seg" id="ptCold">Cold start<br><span style="color:var(--hint)">CBF 0.6 CF 0.4</span></div>
+        <div class="phase-seg" id="ptSoft">GRU entry<br><span style="color:var(--hint)">+GRU 0.2</span></div>
+        <div class="phase-seg" id="ptGrow">GRU growing<br><span style="color:var(--hint)">+GRU 0.25</span></div>
+        <div class="phase-seg" id="ptFull">Full hybrid<br><span style="color:var(--hint)">0.4/0.3/0.3</span></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:6px;">
+        <span style="font-size:11px;color:var(--muted);">CBF <b id="wCBF">—</b></span>
+        <span style="font-size:11px;color:var(--muted);">CF <b id="wCF">—</b></span>
+        <span style="font-size:11px;color:var(--muted);">GRU <b id="wGRU">—</b></span>
+      </div>
+      <div class="weight-strip">
+        <div class="ws-seg" id="wsC" style="background:#5DCAA5;width:60%"></div>
+        <div class="ws-seg" id="wsF" style="background:#7F77DD;width:40%"></div>
+        <div class="ws-seg" id="wsG" style="background:#F0997B;width:0%"></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;" id="phaseExplain">—</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Feedback breakdown</div>
+      <div id="feedbackBars">
+        <div class="fb-row"><span class="fb-label">♥ Likes</span><div class="fb-track"><div class="fb-fill" id="fbLike" style="width:0%;background:#5DCAA5"></div></div><span class="fb-count" id="fcLike">0</span></div>
+        <div class="fb-row"><span class="fb-label">↷ Skips</span><div class="fb-track"><div class="fb-fill" id="fbSkip" style="width:0%;background:#E24B4A"></div></div><span class="fb-count" id="fcSkip">0</span></div>
+        <div class="fb-row"><span class="fb-label">↺ Replays</span><div class="fb-track"><div class="fb-fill" id="fbReplay" style="width:0%;background:#7F77DD"></div></div><span class="fb-count" id="fcReplay">0</span></div>
+        <div class="fb-row"><span class="fb-label">✕ Dislikes</span><div class="fb-track"><div class="fb-fill" id="fbDislike" style="width:0%;background:#F0997B"></div></div><span class="fb-count" id="fcDislike">0</span></div>
+        <div class="fb-row"><span class="fb-label">▶ Neutral</span><div class="fb-track"><div class="fb-fill" id="fbNeutral" style="width:0%;background:var(--hint)"></div></div><span class="fb-count" id="fcNeutral">0</span></div>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:var(--muted);">Feedback score: <b id="fbScore">—</b> &nbsp;<span id="fbInterp" style="color:var(--hint)"></span></div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 2: RECOMMENDATION INSPECTOR ──────────────── -->
+  <div class="section-sep">Recommendation inspector</div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Latest recommendation cycle</div>
+      <div class="tabs">
+        <button class="tab active" onclick="showTab('rec',0,this)">Cycle 1</button>
+        <button class="tab" onclick="showTab('rec',1,this)">Cycle 2</button>
+        <button class="tab" onclick="showTab('rec',2,this)">Cycle 3</button>
+      </div>
+      <div id="recCycle0" class="tab-panel active"><div style="color:var(--hint);font-size:13px;">Loading...</div></div>
+      <div id="recCycle1" class="tab-panel"></div>
+      <div id="recCycle2" class="tab-panel"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Score breakdown — current cycle</div>
+      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+        <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);"><span style="width:8px;height:8px;border-radius:2px;background:#5DCAA5;display:inline-block"></span>CBF — content similarity</span>
+        <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);"><span style="width:8px;height:8px;border-radius:2px;background:#7F77DD;display:inline-block"></span>CF — co-occurrence</span>
+        <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);"><span style="width:8px;height:8px;border-radius:2px;background:#F0997B;display:inline-block"></span>GRU — sequential</span>
+      </div>
+      <div class="chart-wrap" style="height:240px;">
+        <canvas id="scoreChart" role="img" aria-label="Stacked bar chart showing CBF CF and GRU score contributions per recommended song">No chart data yet.</canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 3: BIAS MONITOR ──────────────────────────── -->
+  <div class="section-sep">Bias monitor</div>
+
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-title">Bias checks</div>
+
+      <div class="bias-check">
+        <div class="bias-check-label">Genre over-rep</div>
+        <div class="bias-track"><div class="bias-fill" id="biasGenre" style="width:0%;background:var(--teal)"></div></div>
+        <div class="bias-val" id="biasGenreVal">—</div>
+        <span class="pill" id="biasGenrePill">—</span>
+      </div>
+
+      <div class="bias-check">
+        <div class="bias-check-label">Popularity ratio</div>
+        <div class="bias-track"><div class="bias-fill" id="biasPop" style="width:0%;background:var(--teal)"></div></div>
+        <div class="bias-val" id="biasPopVal">—</div>
+        <span class="pill" id="biasPopPill">—</span>
+      </div>
+
+      <div class="bias-check">
+        <div class="bias-check-label">Score disparity</div>
+        <div class="bias-track"><div class="bias-fill" id="biasDisp" style="width:0%;background:var(--teal)"></div></div>
+        <div class="bias-val" id="biasDispVal">—</div>
+        <span class="pill" id="biasDispPill">—</span>
+      </div>
+
+      <div class="flag-list" id="flagList"></div>
+
+      <div id="mitigationBox" style="display:none" class="mitigation">
+        <div class="mitigation-title">Mitigation suggestions</div>
+        <ul id="mitigationList"></ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Diversity score (Shannon entropy)</div>
+      <div style="font-size:36px;font-weight:500;margin-bottom:4px;" id="diversityBig">—</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Higher = more genre variety in recommendations</div>
+      <div class="chart-wrap" style="height:140px;">
+        <canvas id="diversityChart" role="img" aria-label="Line chart showing diversity score trend over recommendation cycles">No data yet.</canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Genre distribution in recs</div>
+      <div id="genreDistBars">
+        <div style="color:var(--hint);font-size:13px;">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 4: SYSTEM STATS ──────────────────────────── -->
+  <div class="section-sep">System stats</div>
+
+  <div class="grid-4" style="margin-bottom:20px;">
+    <div class="metric"><div class="metric-label">Total plays</div><div class="metric-value" id="sTotalPlays">—</div><div class="metric-sub">this session</div></div>
+    <div class="metric"><div class="metric-label">Avg play time</div><div class="metric-value" id="sAvgPlay">—</div><div class="metric-sub">seconds</div></div>
+    <div class="metric"><div class="metric-label">Avg feedback score</div><div class="metric-value" id="sAvgFb">—</div><div class="metric-sub" id="sAvgFbInterp">—</div></div>
+    <div class="metric"><div class="metric-label">Diversity trend</div><div class="metric-value" id="sDiversity">—</div><div class="metric-sub">latest entropy</div></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Popularity score histogram</div>
+      <div class="chart-wrap" style="height:200px;">
+        <canvas id="popHistChart" role="img" aria-label="Histogram of popularity scores for recommended songs">No data yet.</canvas>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Diversity trend — entropy per cycle</div>
+      <div class="chart-wrap" style="height:200px;">
+        <canvas id="trendChart" role="img" aria-label="Line chart showing Shannon entropy per recommendation cycle over time">No data yet.</canvas>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /shell -->
+
+<script>
+const SESSION_ID = '__SESSION_ID__';
+const BASE = '/monitoring/session/' + SESSION_ID;
+const POLL_MS = 4000;
+
+// Chart instances
+let scoreChartInst = null;
+let diversityChartInst = null;
+let popHistChartInst = null;
+let trendChartInst = null;
+
+const PHASE_EXPLAIN = {
+  cold_start:   'Cold start: CBF dominates using per-user liked embeddings. GRU inactive (needs ≥3 plays). CF handles co-occurrence patterns.',
+  gru_soft_entry: 'GRU activates at low weight. Sequential embedding prediction feeds in alongside CBF + CF.',
+  gru_growing:  'GRU weight increasing as play history deepens. SessionGRU forward pass predicts next embedding against 81K catalog.',
+  full_hybrid:  'Full hybrid active. CBF 0.4 (group preference vector) + CF 0.3 (co-occurrence) + GRU 0.3 (sequential prediction).',
+};
+
+const PHASE_STEPS = {
+  cold_start:     'ptCold',
+  gru_soft_entry: 'ptSoft',
+  gru_growing:    'ptGrow',
+  full_hybrid:    'ptFull',
+};
+
+// ── helpers ──────────────────────────────────────────────────
+
+function pct(v, max) { return Math.min(100, (v / max) * 100).toFixed(1) + '%'; }
+function fmtScore(v) { return typeof v === 'number' ? v.toFixed(3) : '—'; }
+function now() { return new Date().toLocaleTimeString(); }
+
+function showErr(msg) {
+  const b = document.getElementById('errBanner');
+  b.textContent = 'API error: ' + msg;
+  b.style.display = 'block';
+}
+function clearErr() { document.getElementById('errBanner').style.display = 'none'; }
+
+function showTab(group, idx, btn) {
+  document.querySelectorAll(`[id^="${group}Cycle"]`).forEach((el,i)=>{
+    el.classList.toggle('active', i===idx);
+  });
+  btn.closest('.tabs').querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',i===idx));
+}
+
+// ── fetch helpers ─────────────────────────────────────────────
+
+async function fetchJSON(url) {
+  const r = await fetch(url);
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || 'unknown error');
+  return j.data;
+}
+
+// ── STATE ─────────────────────────────────────────────────────
+
+async function updateState() {
+  const d = await fetchJSON(BASE + '/state');
+
+  document.getElementById('mSongsPlayed').textContent = d.songs_played ?? '—';
+  document.getElementById('mUsers').textContent = d.user_count ?? '—';
+  document.getElementById('mAvgPlay').textContent = d.avg_play_duration_sec != null ? d.avg_play_duration_sec + 's' : '—';
+  const status = d.status ?? 'active';
+  const statusEl = document.getElementById('mStatus');
+  statusEl.textContent = status;
+  statusEl.style.color = status === 'active' ? 'var(--teal)' : 'var(--muted)';
+  document.getElementById('mStatusSub').textContent = d.created_at ? 'since ' + new Date(d.created_at).toLocaleTimeString() : '';
+
+  const phase = d.phase ?? 'cold_start';
+  document.getElementById('phaseLabel').textContent = phase.replace(/_/g,' ');
+  document.getElementById('phaseExplain').textContent = PHASE_EXPLAIN[phase] ?? '';
+
+  const pClasses = ['ptCold','ptSoft','ptGrow','ptFull'];
+  pClasses.forEach(id => document.getElementById(id).classList.remove('current'));
+  const activeStep = PHASE_STEPS[phase];
+  if (activeStep) document.getElementById(activeStep).classList.add('current');
+
+  const w = d.weights ?? {cbf:0.6,cf:0.4,gru:0.0};
+  document.getElementById('wCBF').textContent = Math.round(w.cbf*100) + '%';
+  document.getElementById('wCF').textContent  = Math.round(w.cf*100)  + '%';
+  document.getElementById('wGRU').textContent = Math.round(w.gru*100) + '%';
+  document.getElementById('wsC').style.width  = Math.round(w.cbf*100) + '%';
+  document.getElementById('wsF').style.width  = Math.round(w.cf*100)  + '%';
+  document.getElementById('wsG').style.width  = Math.round(w.gru*100) + '%';
+
+  const phasePill = document.getElementById('phasePill');
+  phasePill.textContent = phase.replace(/_/g,' ');
+  phasePill.className = 'pill ' + (phase==='full_hybrid'?'pill-teal':phase==='cold_start'?'pill-gray':'pill-purple');
+
+  // feedback bars
+  const fb = d.feedback_counts ?? {};
+  const total = Object.values(fb).reduce((a,b)=>a+b,0) || 1;
+  [['like','fbLike','fcLike'],['skip','fbSkip','fcSkip'],['replay','fbReplay','fcReplay'],['dislike','fbDislike','fcDislike'],['neutral','fbNeutral','fcNeutral']].forEach(([k,barId,cntId])=>{
+    const v = fb[k] ?? 0;
+    document.getElementById(barId).style.width = pct(v, total);
+    document.getElementById(cntId).textContent = v;
+  });
+}
+
+// ── RECOMMENDATIONS ───────────────────────────────────────────
+
+async function updateRecs() {
+  const cycles = await fetchJSON(BASE + '/recommendations?cycles=3');
+  const list = cycles.cycles ?? [];
+
+  list.forEach((cycle, ci) => {
+    const panel = document.getElementById('recCycle' + ci);
+    if (!panel) return;
+    const songs = cycle.songs ?? [];
+    panel.innerHTML = songs.slice(0,10).map(s => {
+      const mx = Math.max(...songs.map(x=>x.final_score), 0.001);
+      const cbfW = ((s.cbf_score/mx)*120).toFixed(0);
+      const cfW  = ((s.cf_score/mx)*120).toFixed(0);
+      const gruW = ((s.gru_score/mx)*120).toFixed(0);
+      return `<div class="rec-song">
+        <div class="rec-song-header">
+          <span class="rec-rank">${s.rank}</span>
+          <span class="rec-title">${s.title ?? '—'}</span>
+          <span class="rec-final">${fmtScore(s.final_score)}</span>
+        </div>
+        <div class="rec-meta">${s.artist ?? ''} · <span style="color:var(--hint)">${s.genre ?? ''}</span></div>
+        <div class="score-bar-row"><span class="sb-label">CBF</span><div class="sb-track"><div class="sb-fill" style="width:${cbfW}px;background:#5DCAA5"></div></div><span class="sb-val">${fmtScore(s.cbf_score)}</span></div>
+        <div class="score-bar-row"><span class="sb-label">CF</span><div class="sb-track"><div class="sb-fill" style="width:${cfW}px;background:#7F77DD"></div></div><span class="sb-val">${fmtScore(s.cf_score)}</span></div>
+        <div class="score-bar-row"><span class="sb-label">GRU</span><div class="sb-track"><div class="sb-fill" style="width:${gruW}px;background:#F0997B"></div></div><span class="sb-val">${fmtScore(s.gru_score)}</span></div>
+      </div>`;
+    }).join('');
+  });
+
+  // Score breakdown stacked bar chart — latest cycle
+  if (list.length > 0) {
+    const songs = (list[0].songs ?? []).slice(0, 8);
+    const labels = songs.map(s => s.title?.length > 14 ? s.title.slice(0,13)+'…' : s.title);
+    const cbf = songs.map(s => +(s.cbf_score ?? 0).toFixed(3));
+    const cf  = songs.map(s => +(s.cf_score  ?? 0).toFixed(3));
+    const gru = songs.map(s => +(s.gru_score ?? 0).toFixed(3));
+
+    if (scoreChartInst) scoreChartInst.destroy();
+    const ctx = document.getElementById('scoreChart').getContext('2d');
+    scoreChartInst = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'CBF', data: cbf, backgroundColor: '#5DCAA5', borderRadius: 3 },
+          { label: 'CF',  data: cf,  backgroundColor: '#7F77DD', borderRadius: 3 },
+          { label: 'GRU', data: gru, backgroundColor: '#F0997B', borderRadius: 3 },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { stacked: true, ticks: { font: { size: 10 }, color: '#9d9d98' }, grid: { display: false } },
+          y: { stacked: true, ticks: { font: { size: 10 }, color: '#9d9d98' }, grid: { color: 'rgba(0,0,0,0.06)' } }
+        }
+      }
+    });
+  }
+}
+
+// ── BIAS ──────────────────────────────────────────────────────
+
+async function updateBias() {
+  const d = await fetchJSON(BASE + '/bias');
+
+  const genrePct = Math.max(...Object.values(d.genre_distribution ?? {}), 0) * 100;
+  const popRatio = d.popularity_ratio ?? 1.0;
+  const disp     = d.score_disparity ?? 0.0;
+  const divScore = d.diversity_score ?? 0.0;
+
+  function biasBar(barId, valId, pillId, value, threshold, displayVal, unit) {
+    const fillPct = Math.min(100, (value / (threshold * 1.5)) * 100).toFixed(1);
+    const ok = value <= threshold;
+    document.getElementById(barId).style.width = fillPct + '%';
+    document.getElementById(barId).style.background = ok ? '#5DCAA5' : '#E24B4A';
+    document.getElementById(valId).textContent = displayVal + unit;
+    const pill = document.getElementById(pillId);
+    pill.textContent = ok ? 'OK' : 'Flag';
+    pill.className = 'pill ' + (ok ? 'pill-green' : 'pill-red');
+  }
+
+  biasBar('biasGenre','biasGenreVal','biasGenrePill', genrePct,  40,  genrePct.toFixed(1), '%');
+  biasBar('biasPop',  'biasPopVal',  'biasPopPill',   popRatio,  1.5, popRatio.toFixed(2), 'x');
+  biasBar('biasDisp', 'biasDispVal', 'biasDispPill',  disp,      0.15, disp.toFixed(3),   '');
+
+  document.getElementById('diversityBig').textContent = divScore.toFixed(3);
+  document.getElementById('sDiversity').textContent = divScore.toFixed(3);
+
+  const flags = d.active_flags ?? [];
+  const flagList = document.getElementById('flagList');
+  flagList.innerHTML = flags.map(f => `<span class="pill pill-red" style="font-size:10px;">${f.replace(/_/g,' ')}</span>`).join('');
+
+  const suggestions = d.mitigation_suggestions ?? [];
+  const mbox = document.getElementById('mitigationBox');
+  if (suggestions.length > 0) {
+    mbox.style.display = 'block';
+    document.getElementById('mitigationList').innerHTML = suggestions.map(s=>`<li>${s}</li>`).join('');
+  } else {
+    mbox.style.display = 'none';
+  }
+
+  // Genre distribution bars
+  const genreDist = d.genre_distribution ?? {};
+  const sorted = Object.entries(genreDist).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const COLORS = ['#5DCAA5','#7F77DD','#F0997B','#EF9F27','#378ADD','#D4537E','#639922','#888780'];
+  document.getElementById('genreDistBars').innerHTML = sorted.map(([g,p],i)=>`
+    <div class="genre-row">
+      <span class="genre-name">${g}</span>
+      <div class="genre-track"><div class="genre-fill" style="width:${(p*100).toFixed(1)}%;background:${COLORS[i%COLORS.length]}"></div></div>
+      <span class="genre-pct">${(p*100).toFixed(1)}%</span>
+    </div>`).join('');
+}
+
+// ── STATS ─────────────────────────────────────────────────────
+
+async function updateStats() {
+  const d = await fetchJSON(BASE + '/stats');
+
+  document.getElementById('sTotalPlays').textContent = d.total_plays ?? '—';
+  document.getElementById('sAvgPlay').textContent = d.avg_play_duration_sec != null ? d.avg_play_duration_sec + 's' : '—';
+  document.getElementById('sAvgFb').textContent = d.avg_feedback_score != null ? d.avg_feedback_score.toFixed(2) : '—';
+  document.getElementById('sAvgFbInterp').textContent = d.feedback_score_interpretation ?? '';
+
+  // Popularity histogram
+  const hist = d.popularity_histogram ?? [];
+  if (hist.length) {
+    if (popHistChartInst) popHistChartInst.destroy();
+    const ctx2 = document.getElementById('popHistChart').getContext('2d');
+    popHistChartInst = new Chart(ctx2, {
+      type: 'bar',
+      data: {
+        labels: hist.map(b => b.lo.toFixed(1) + '–' + b.hi.toFixed(1)),
+        datasets: [{ label: 'Songs', data: hist.map(b=>b.count), backgroundColor: '#7F77DD', borderRadius: 3 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { font:{size:10}, color:'#9d9d98', maxRotation: 45, autoSkip: false }, grid:{display:false} },
+          y: { ticks: { font:{size:10}, color:'#9d9d98' }, grid:{color:'rgba(0,0,0,0.06)'} }
+        }
+      }
+    });
+  }
+
+  // Diversity trend
+  const trend = d.diversity_trend ?? [];
+  if (trend.length) {
+    if (trendChartInst) trendChartInst.destroy();
+    const ctx3 = document.getElementById('trendChart').getContext('2d');
+    trendChartInst = new Chart(ctx3, {
+      type: 'line',
+      data: {
+        labels: trend.map((_,i)=>'Cycle '+(i+1)),
+        datasets: [{
+          label: 'Entropy', data: trend.map(t=>t.entropy),
+          borderColor: '#5DCAA5', backgroundColor: 'rgba(93,202,165,0.1)',
+          borderWidth: 2, pointRadius: 3, fill: true, tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks:{font:{size:10},color:'#9d9d98'}, grid:{display:false} },
+          y: { min: 0, ticks:{font:{size:10},color:'#9d9d98'}, grid:{color:'rgba(0,0,0,0.06)'} }
+        }
+      }
+    });
+
+    // also update diversity mini chart in bias section
+    if (diversityChartInst) diversityChartInst.destroy();
+    const ctx4 = document.getElementById('diversityChart').getContext('2d');
+    diversityChartInst = new Chart(ctx4, {
+      type: 'line',
+      data: {
+        labels: trend.map((_,i)=>''+(i+1)),
+        datasets: [{ label: 'Entropy', data: trend.map(t=>t.entropy), borderColor:'#5DCAA5', backgroundColor:'rgba(93,202,165,0.1)', borderWidth:1.5, pointRadius:2, fill:true, tension:0.3 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend:{display:false} },
+        scales: {
+          x: { ticks:{font:{size:9},color:'#9d9d98'}, grid:{display:false} },
+          y: { min:0, ticks:{font:{size:9},color:'#9d9d98'}, grid:{color:'rgba(0,0,0,0.04)'} }
+        }
+      }
+    });
+  }
+}
+
+// ── Poll loop ─────────────────────────────────────────────────
+
+async function pollAll() {
+  try {
+    clearErr();
+    await Promise.allSettled([
+      updateState(),
+      updateRecs(),
+      updateBias(),
+      updateStats(),
+    ]);
+    document.getElementById('lastUpdated').textContent = 'Updated ' + now();
+  } catch(e) {
+    showErr(e.message);
+  }
+}
+
+// Stagger calls so Cloud Run doesn't get 4 simultaneous requests on load
+pollAll();
+setInterval(pollAll, POLL_MS);
+</script>
+</body>
+</html>

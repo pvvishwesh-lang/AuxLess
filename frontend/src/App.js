@@ -127,7 +127,7 @@ export default function App() {
         {tab === 'home'      && <TabHome      onLogin={() => setScreen('auth')} onTab={setTab} />}
         {tab === 'create'    && <TabCreate    user={user} onEnterRoom={handleEnterRoom} />}
         {tab === 'join'      && <TabJoin      user={user} onEnterRoom={handleEnterRoom} />}
-        {tab === 'analytics' && <TabAnalytics />}
+        {tab === 'analytics' && <TabAnalytics roomId={roomId} />}
         {tab === 'profile'   && <ProfilePage   user={user} />}
         {tab === 'settings'  && <SettingsPage  user={user} onLogout={handleLogout} />}
         {tab === 'playlists' && <PlaylistsPage user={user} />}

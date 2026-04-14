@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import {
-  LineChart, Line, BarChart, Bar,
-  XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell
+  BarChart, Bar, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid, Cell, LineChart, Line
 } from 'recharts';
 import { T } from '../styles/tokens';
+import { mlDb } from '../config/firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
 import {
-  MOCK_STREAM_EVENTS,
-  MOCK_FEEDBACK_SCORES,
-  MOCK_BIAS_METRICS,
-  PIPELINE_STEPS,
+  MOCK_BIAS_METRICS, PIPELINE_STEPS
 } from '../data/mockData';
 
-// custom tooltip
+const toSessionId = (id) => (id || '').replace(/^AUX-/i, '').toLowerCase();
+
 const CustomTip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
@@ -24,7 +24,6 @@ const CustomTip = ({ active, payload, label }) => {
   );
 };
 
-// stat card
 function StatCard({ n, label, color, sub }) {
   return (
     <div style={{ background: T.card, borderRadius: 14, border: `1px solid ${T.border}`, padding: '18px 16px', textAlign: 'center' }}>
@@ -35,54 +34,82 @@ function StatCard({ n, label, color, sub }) {
   );
 }
 
-export default function TabAnalytics() {
+export default function TabAnalytics({ roomId }) {
   const [biasSlice, setBiasSlice] = useState('genre');
-  const [, setTick] = useState(0);
-  const [liveEvents, setLiveEvents] = useState(MOCK_STREAM_EVENTS);
   const [windowCount, setWindowCount] = useState(5);
+  const [recommendations, setRecommendations] = useState([]);
+  const [feedbackEvents, setFeedbackEvents] = useState([]);
+  const [totalEvents, setTotalEvents] = useState(0);
 
-  // simulate real-time window updates (matches FixedWindows(60) in streaming_pipeline.py)
+  const sessionId = toSessionId(roomId);
+
+  // Live recommendations from Firestore
   useEffect(() => {
-    const id = setInterval(() => {
-      setTick(t => t + 1);
-      setWindowCount(w => w + 1);
-      setLiveEvents(prev => {
-        const updated = prev.map(e => ({
-          ...e,
-          play_count:     e.play_count     + Math.floor(Math.random() * 3),
-          skip_count:     e.skip_count     + (Math.random() > 0.7 ? 1 : 0),
-          complete_count: e.complete_count + Math.floor(Math.random() * 2),
-          total_events:   e.total_events   + Math.floor(Math.random() * 4),
-        }));
-        return updated.map(e => ({
-          ...e,
-          completion_rate: e.total_events > 0
-            ? parseFloat((e.complete_count / e.total_events).toFixed(4))
-            : 0,
-        }));
-      });
-    }, 3000);
+    if (!sessionId) return;
+    const unsub = onSnapshot(
+      collection(mlDb, 'sessions', sessionId, 'recommendations'),
+      (snap) => {
+        if (snap.empty) return;
+        setRecommendations(snap.docs.map(d => ({
+          id: d.id,
+          name: (d.data().track_title || d.data().title || 'Unknown').slice(0, 12),
+          score: parseFloat(d.data().final_score || 0),
+          likes: d.data().like_count || 0,
+          dislikes: d.data().dislike_count || 0,
+          genre: d.data().genre || '',
+        })));
+      }, () => {}
+    );
+    return () => unsub();
+  }, [sessionId]);
+
+  // Live feedback events from Firestore
+  useEffect(() => {
+    if (!sessionId) return;
+    const unsub = onSnapshot(
+      collection(mlDb, 'sessions', sessionId, 'feedback_events'),
+      (snap) => {
+        setTotalEvents(snap.size);
+        setFeedbackEvents(snap.docs.map(d => d.data()));
+      }, () => {}
+    );
+    return () => unsub();
+  }, [sessionId]);
+
+  // Window counter
+  useEffect(() => {
+    const id = setInterval(() => setWindowCount(w => w + 1), 60000);
     return () => clearInterval(id);
   }, []);
 
-  // completion rate chart data (from AggregateMetricsFn output)
-  const completionData = liveEvents.map(e => ({
-    name: e.song_name.length > 10 ? e.song_name.slice(0, 10) + '…' : e.song_name,
-    'Completion %': parseFloat((e.completion_rate * 100).toFixed(1)),
-    'Play count':   e.play_count,
-    'Skip count':   e.skip_count,
+  // Build chart data from live recommendations
+  const scoreData = recommendations.map(r => ({
+    name: r.name,
+    Score: r.score,
+    color: r.score >= 0 ? T.green : '#EF4444',
   }));
 
-  // feedback score chart (from ScoreFeedbackFn — like+2, dislike-2, skip-0.5, replay+1.5)
-  const scoreData = MOCK_FEEDBACK_SCORES.map(s => ({
-    name:  s.song_name.length > 10 ? s.song_name.slice(0, 10) + '…' : s.song_name,
-    Score: s.score,
-    color: s.score >= 0 ? T.green : '#EF4444',
+  const likesData = recommendations.map(r => ({
+    name: r.name,
+    '👍 Likes': r.likes,
+    '👎 Dislikes': r.dislikes,
   }));
 
-  // total events processed
-  const totalEvents = liveEvents.reduce((a, e) => a + e.total_events, 0);
-  const avgCompletion = (liveEvents.reduce((a, e) => a + e.completion_rate, 0) / liveEvents.length * 100).toFixed(1);
+  // Count event types
+  const eventCounts = feedbackEvents.reduce((acc, e) => {
+    acc[e.event_type] = (acc[e.event_type] || 0) + 1;
+    return acc;
+  }, {});
+
+  const eventData = Object.entries(eventCounts).map(([type, count]) => ({
+    name: type,
+    count,
+    color: type === 'like' ? T.green : type === 'dislike' ? '#EF4444' : type === 'play' ? T.purple : T.amber,
+  }));
+
+  const avgScore = recommendations.length
+    ? (recommendations.reduce((a, r) => a + r.score, 0) / recommendations.length).toFixed(2)
+    : '0.00';
 
   return (
     <div className="fade-up" style={{ maxWidth: 860, margin: '0 auto', padding: '36px 20px 80px' }}>
@@ -105,79 +132,82 @@ export default function TabAnalytics() {
 
       {/* stat cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10, marginBottom: 20 }}>
-        <StatCard n={totalEvents.toLocaleString()} label="Events processed"   color={T.green}  sub={`+${Math.floor(Math.random()*12)+4}/s`} />
-        <StatCard n={`${avgCompletion}%`}           label="Avg completion rate" color={T.purple} />
-        <StatCard n={windowCount}                   label="Windows processed"  color={T.pink}   sub="60s each" />
-        <StatCard n="99ms"                          label="Pipeline latency"   color={T.amber}  />
+        <StatCard n={totalEvents} label="Events processed" color={T.green} sub="live" />
+        <StatCard n={recommendations.length} label="ML recommendations" color={T.purple} />
+        <StatCard n={avgScore} label="Avg ML score" color={T.pink} />
+        <StatCard n={windowCount} label="Windows processed" color={T.amber} sub="60s each" />
       </div>
 
-      {/* completion rate bar chart — AggregateMetricsFn output */}
-      <div style={{ background: T.card, borderRadius: 18, border: `1px solid ${T.border}`, padding: '20px 18px', marginBottom: 14 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '.09em', marginBottom: 4 }}>
-          Completion rate by track — live (AggregateMetricsFn)
+      {/* feedback scores — live from ML */}
+      {scoreData.length > 0 && (
+        <div style={{ background: T.card, borderRadius: 18, border: `1px solid ${T.border}`, padding: '20px 18px', marginBottom: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '.09em', marginBottom: 4 }}>
+            ML Recommendation Scores — Live
+          </div>
+          <div style={{ fontSize: 11, color: T.dim, marginBottom: 14 }}>
+            final_score from ML model · updates in real-time
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={scoreData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
+              <XAxis dataKey="name" tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: T.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
+              <Tooltip content={<CustomTip />} />
+              <Bar dataKey="Score" radius={[6, 6, 0, 0]} maxBarSize={48}>
+                {scoreData.map((d, i) => (
+                  <Cell key={i} fill={d.color} fillOpacity={0.85} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
-        <div style={{ fontSize: 11, color: T.dim, marginBottom: 14 }}>
-          complete_count / total_events · updates every 60s window
-        </div>
-        <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={completionData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
-            <XAxis dataKey="name" tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: T.muted, fontSize: 10 }} axisLine={false} tickLine={false} domain={[0, 100]} />
-            <Tooltip content={<CustomTip />} />
-            <Bar dataKey="Completion %" radius={[6, 6, 0, 0]} maxBarSize={48}>
-              {completionData.map((_, i) => (
-                <Cell key={i} fill={i === 0 ? T.green : T.purple} fillOpacity={0.85} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      )}
 
-      {/* play vs skip line chart */}
-      <div style={{ background: T.card, borderRadius: 18, border: `1px solid ${T.border}`, padding: '20px 18px', marginBottom: 14 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '.09em', marginBottom: 4 }}>
-          Play count vs skip count — live
+      {/* likes vs dislikes */}
+      {likesData.length > 0 && (
+        <div style={{ background: T.card, borderRadius: 18, border: `1px solid ${T.border}`, padding: '20px 18px', marginBottom: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '.09em', marginBottom: 4 }}>
+            Likes vs Dislikes — Live Voting
+          </div>
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={likesData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
+              <XAxis dataKey="name" tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: T.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
+              <Tooltip content={<CustomTip />} />
+              <Bar dataKey="👍 Likes" fill={T.green} radius={[6, 6, 0, 0]} maxBarSize={32} />
+              <Bar dataKey="👎 Dislikes" fill="#EF4444" radius={[6, 6, 0, 0]} maxBarSize={32} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
-        <div style={{ fontSize: 11, color: T.dim, marginBottom: 14 }}>
-          From ParseEventFn → windowed aggregation · actions: play, skip, complete, like, dislike, replay
-        </div>
-        <ResponsiveContainer width="100%" height={180}>
-          <LineChart data={completionData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
-            <XAxis dataKey="name" tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: T.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
-            <Tooltip content={<CustomTip />} />
-            <Line type="monotone" dataKey="Play count" stroke={T.green}  strokeWidth={2} dot={{ fill: T.green,  r: 3 }} />
-            <Line type="monotone" dataKey="Skip count" stroke="#EF4444"  strokeWidth={2} dot={{ fill: '#EF4444', r: 3 }} />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+      )}
 
-      {/* feedback score chart — ScoreFeedbackFn */}
-      <div style={{ background: T.card, borderRadius: 18, border: `1px solid ${T.border}`, padding: '20px 18px', marginBottom: 14 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '.09em', marginBottom: 4 }}>
-          Feedback scores — ScoreFeedbackFn
+      {/* event types */}
+      {eventData.length > 0 && (
+        <div style={{ background: T.card, borderRadius: 18, border: `1px solid ${T.border}`, padding: '20px 18px', marginBottom: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '.09em', marginBottom: 4 }}>
+            Pipeline Events — Live
+          </div>
+          <div style={{ fontSize: 11, color: T.dim, marginBottom: 14 }}>
+            play · like · dislike · skip · complete · replay
+          </div>
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={eventData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
+              <XAxis dataKey="name" tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: T.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
+              <Tooltip content={<CustomTip />} />
+              <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={48}>
+                {eventData.map((d, i) => (
+                  <Cell key={i} fill={d.color} fillOpacity={0.85} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
-        <div style={{ fontSize: 11, color: T.dim, marginBottom: 14 }}>
-          Weights: like +2.0 · dislike -2.0 · skip -0.5 · replay +1.5 · stored in Firestore sessions/tracks
-        </div>
-        <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={scoreData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
-            <XAxis dataKey="name" tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: T.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
-            <Tooltip content={<CustomTip />} />
-            <Bar dataKey="Score" radius={[6, 6, 0, 0]} maxBarSize={48}>
-              {scoreData.map((d, i) => (
-                <Cell key={i} fill={d.color} fillOpacity={0.85} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      )}
 
-      {/* bias metrics — bias_analyser slices */}
+      {/* bias metrics */}
       <div style={{ background: T.card, borderRadius: 18, border: `1px solid ${T.border}`, padding: '20px 20px', marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
           <div>
@@ -188,9 +218,8 @@ export default function TabAnalytics() {
               Slices &lt;5% upsampled · slices &gt;60% downsampled
             </div>
           </div>
-          {/* slice toggle */}
           <div style={{ display: 'flex', background: T.surface, borderRadius: 8, padding: 3, border: `1px solid ${T.border}` }}>
-            {['genre','country'].map(s => (
+            {['genre', 'country'].map(s => (
               <button key={s} onClick={() => setBiasSlice(s)} style={{
                 padding: '5px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600,
                 border: 'none', cursor: 'pointer',
@@ -207,9 +236,7 @@ export default function TabAnalytics() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 12, color: T.muted }}>{b.slice}</span>
                 {b.adjusted && (
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: `${T.amber}18`, color: T.amber, border: `1px solid ${T.amber}33` }}>
-                    ADJUSTED
-                  </span>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: `${T.amber}18`, color: T.amber, border: `1px solid ${T.amber}33` }}>ADJUSTED</span>
                 )}
               </div>
               <span style={{ fontSize: 12, fontWeight: 600, color: T.text }}>{b.pct}%</span>
@@ -221,7 +248,7 @@ export default function TabAnalytics() {
         ))}
       </div>
 
-      {/* pipeline steps — run_for_session */}
+      {/* pipeline steps */}
       <div style={{ background: T.card, borderRadius: 18, border: `1px solid ${T.border}`, padding: '20px 20px' }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '.09em', marginBottom: 16 }}>
           Pipeline status — run_for_session
@@ -232,19 +259,12 @@ export default function TabAnalytics() {
             padding: '11px 0',
             borderBottom: i < PIPELINE_STEPS.length - 1 ? `1px solid ${T.border}` : 'none',
           }}>
-            <div style={{
-              width: 8, height: 8, borderRadius: '50%', background: p.color,
-              marginTop: 5, flexShrink: 0,
-              animation: p.status !== 'done' ? 'pulse 2s infinite' : 'none',
-            }} />
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: p.color, marginTop: 5, flexShrink: 0, animation: p.status !== 'done' ? 'pulse 2s infinite' : 'none' }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{p.step}</div>
               <div style={{ fontSize: 11, color: T.muted, marginTop: 2, lineHeight: 1.5 }}>{p.detail}</div>
             </div>
-            <span style={{
-              padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700,
-              background: `${p.color}18`, color: p.color, flexShrink: 0,
-            }}>{p.status}</span>
+            <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: `${p.color}18`, color: p.color, flexShrink: 0 }}>{p.status}</span>
           </div>
         ))}
       </div>

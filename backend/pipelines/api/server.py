@@ -203,21 +203,15 @@ def start_session():
         return "Missing session_id", 400
     session_id = data["session_id"]
     log = logging.getLogger(__name__)
-    log.info(f"Starting session: {session_id}")
     try:
         project_id  = os.environ["PROJECT_ID"]
         database_id = os.environ["FIRESTORE_DATABASE"]
         fs = FirestoreClient(project_id, database_id)
         fs.update_session_status(session_id, "running")
+        log.info(f"Session {session_id} set to running — Firestore trigger will launch pipeline")
     except Exception as e:
         log.error(f"Failed to update session status: {e}")
         return "Internal error", 500
-    thread = threading.Thread(
-        target=_run_session_safe,
-        args=(session_id,),
-        daemon=True
-    )
-    thread.start()
     return jsonify({"status": "accepted", "session_id": session_id}), 202
 
 if __name__ == "__main__":

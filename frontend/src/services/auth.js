@@ -23,10 +23,7 @@ export const signInWithGoogle = async () => {
   const token = await user.getIdToken();
   localStorage.setItem('auxless_jwt', token);
 
-  // save refresh token locally too
-  if (refreshToken) {
-    localStorage.setItem('auxless_refresh_token', refreshToken);
-  }
+  // Do not persist refresh tokens in browser storage.
 
   // check if user already exists in YOUR Firestore
   const userRef = doc(db, 'users', user.uid);
@@ -68,7 +65,7 @@ export const signInWithGoogle = async () => {
 
 // ── Save onboarding prefs + refresh token to both Firestores ──
 export const saveUserPrefs = async (uid, genres, artists) => {
-  const refreshToken = localStorage.getItem('auxless_refresh_token') || '';
+  const refreshToken = '';
 
   // 1. Save to YOUR Firestore — users collection
   await setDoc(
@@ -102,7 +99,6 @@ export const saveUserPrefs = async (uid, genres, artists) => {
 export const logoutUser = async () => {
   await signOut(auth);
   localStorage.removeItem('auxless_jwt');
-  localStorage.removeItem('auxless_refresh_token');
 };
 
 // ── Auth state listener ───────────────────────────────────────

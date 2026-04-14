@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { T } from '../styles/tokens';
 import Blobs from '../components/Blobs';
+import { getYouTubeAuthUrl } from '../services/auth';
 
 export default function SettingsPage({ user, onLogout }) {
   const [notifications, setNotifications] = useState(true);
   const [autoJoin,      setAutoJoin]      = useState(false);
   const [quality,       setQuality]       = useState('high');
+
+  const hasYouTubeToken = user?.refreshToken || localStorage.getItem('auxless_refresh_token');
 
   const Toggle = ({ on, onClick }) => (
     <div onClick={onClick} style={{ width: 42, height: 24, borderRadius: 12, background: on ? T.green : 'rgba(255,255,255,0.1)', cursor: 'pointer', position: 'relative', transition: 'background .25s' }}>
@@ -18,6 +21,30 @@ export default function SettingsPage({ user, onLogout }) {
       <Blobs />
       <div style={{ position: 'relative', zIndex: 1 }}>
         <h2 style={{ fontSize: 24, fontWeight: 900, color: T.text, letterSpacing: '-0.5px', marginBottom: 24 }}>Settings</h2>
+
+        {/* YouTube Connect */}
+        <div style={{ background: T.card, borderRadius: 18, border: `1px solid ${T.border}`, padding: '20px 22px', marginBottom: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 14 }}>YouTube</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>YouTube account</div>
+              <div style={{ fontSize: 12, color: hasYouTubeToken ? T.green : '#EF4444', marginTop: 2 }}>
+                {hasYouTubeToken ? '✅ Connected — ML can fetch your playlists' : '❌ Not connected — connect to use your own playlists'}
+              </div>
+            </div>
+            <button
+              onClick={() => window.location.href = getYouTubeAuthUrl()}
+              style={{
+                padding: '8px 16px', borderRadius: 10,
+                background: hasYouTubeToken ? T.greenLo : '#FF000022',
+                border: `1px solid ${hasYouTubeToken ? T.green : '#FF0000'}44`,
+                color: hasYouTubeToken ? T.green : '#FF4444',
+                fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+              }}>
+              {hasYouTubeToken ? '🔄 Reconnect' : '▶ Connect'}
+            </button>
+          </div>
+        </div>
 
         {/* preferences */}
         <div style={{ background: T.card, borderRadius: 18, border: `1px solid ${T.border}`, padding: '20px 22px', marginBottom: 14 }}>
@@ -34,7 +61,6 @@ export default function SettingsPage({ user, onLogout }) {
               <Toggle on={s.on} onClick={() => s.set(p => !p)} />
             </div>
           ))}
-          {/* quality selector */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0' }}>
             <div>
               <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>Stream quality</div>

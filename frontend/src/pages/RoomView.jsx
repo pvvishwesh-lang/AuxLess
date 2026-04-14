@@ -27,7 +27,6 @@ const WEIGHTS           = { like: 2, dislike: -2, skip: -0.5, replay: 1.5, play:
 const SONGS_PER_SESSION = 10;
 const toSessionId       = (id) => (id || '').replace(/^AUX-/i, '').toLowerCase();
 
-// ── YouTube Player — synced audio for all users ───────────────
 function YouTubePlayer({ videoId, startedAt, onEnd }) {
   const [ready,   setReady]   = useState(false);
   const [clicked, setClicked] = useState(false);
@@ -35,7 +34,6 @@ function YouTubePlayer({ videoId, startedAt, onEnd }) {
 
   useEffect(() => {
     if (!videoId) return;
-
     const initPlayer = () => {
       try { playerRef.current?.destroy(); } catch {}
       playerRef.current = new window.YT.Player('yt-player', {
@@ -56,7 +54,6 @@ function YouTubePlayer({ videoId, startedAt, onEnd }) {
         },
       });
     };
-
     if (window.YT && window.YT.Player) {
       initPlayer();
     } else {
@@ -67,7 +64,6 @@ function YouTubePlayer({ videoId, startedAt, onEnd }) {
       }
       window.onYouTubeIframeAPIReady = initPlayer;
     }
-
     return () => { try { playerRef.current?.destroy(); } catch {} };
   }, [videoId, startedAt, onEnd]);
 
@@ -95,9 +91,8 @@ function YouTubePlayer({ videoId, startedAt, onEnd }) {
   );
 }
 
-// ── Share Modal ────────────────────────────────────────────────
 function ShareModal({ roomId, onClose }) {
-  const link = `https://auxless-frontend-d9lf.vercel.app`;
+  const link = `https://aux-less.vercel.app`;
   const copy = (text) => { navigator.clipboard?.writeText(text).catch(() => {}); toast.success('Copied!'); };
   return (
     <div style={{ position:'fixed', inset:0, zIndex:200, background:'rgba(0,0,0,0.75)',
@@ -140,10 +135,11 @@ function ShareModal({ roomId, onClose }) {
   );
 }
 
-// ── Main RoomView ──────────────────────────────────────────────
 export default function RoomView({ roomId, user, onLeave }) {
-  const code      = roomId || 'AUX-7749';
-  const sessionId = toSessionId(code);
+  const code          = roomId || 'AUX-7749';
+  const sessionId     = toSessionId(code);
+  const queueCacheKey = `queue_${sessionId}`;
+  const playedKey     = `played_${sessionId}`;
 
   const [queue,              setQueue]              = useState([]);
   const [members,            setMembers]            = useState(MOCK_MEMBERS);
@@ -159,6 +155,7 @@ export default function RoomView({ roomId, user, onLeave }) {
   const [playOrder,          setPlayOrder]          = useState(1);
   const [currentSongEventId, setCurrentSongEventId] = useState(null);
   const [nowPlaying,         setNowPlaying]         = useState(null);
+  const [sessionStarted,     setSessionStarted]     = useState(false);
 
   const playOrderRef   = useRef(1);
   const queueRef       = useRef([]);
@@ -180,11 +177,39 @@ export default function RoomView({ roomId, user, onLeave }) {
     if (roomId) sessionStorage.setItem('auxless_room', roomId);
   }, [roomId]);
 
+  // ── Restore cached queue on mount ────────────────────────
+  useEffect(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem(queueCacheKey) || '[]');
+      if (cached.length > 0) {
+        setQueue(cached);
+        setIsLive(true);
+        startedRef.current = true;
+        console.log('[Queue] Restored', cached.length, 'songs from cache');
+      }
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Song start ──────────────────────────────────────────────
   const handleSongStart = useCallback(async (song, order) => {
     if (!song) return;
-    setNowPlaying(song);
 
+    // Save to played list
+    const played = JSON.parse(localStorage.getItem(playedKey) || '[]');
+    if (!played.includes(song.id)) {
+      played.push(song.id);
+      localStorage.setItem(playedKey, JSON.stringify(played));
+    }
+
+    // Remove from queue cache
+    try {
+      const cached  = JSON.parse(localStorage.getItem(queueCacheKey) || '[]');
+      const updated = cached.filter(s => s.id !== song.id);
+      localStorage.setItem(queueCacheKey, JSON.stringify(updated));
+    } catch {}
+
+    setNowPlaying(song);
     if (roomId) {
       try {
         await updateDoc(doc(db, 'rooms', roomId), {
@@ -199,7 +224,6 @@ export default function RoomView({ roomId, user, onLeave }) {
         });
       } catch {}
     }
-
     try {
       const eventId = await writeSongEvent({ roomId, song, playOrder: order, sessionNum: sessionNumRef.current });
       setCurrentSongEventId(eventId);
@@ -219,14 +243,32 @@ export default function RoomView({ roomId, user, onLeave }) {
     } catch (e) {
       console.warn('handleSongStart failed:', e);
     }
-  }, [roomId, user]);
+  }, [roomId, user, sessionId, playedKey, queueCacheKey]);
 
   // ── Song ends → play highest liked next ──────────────────
   const handleSongEnd = useCallback(() => {
     const current = queueRef.current;
-    if (!current || current.length < 2) return;
-
+    if (!current || current.length < 2) {
+      startedRef.current = false;
+      setIsLive(false);
+      return;
+    }
     const playing = current.find(t => t.playing) || current[0];
+
+    // Save to played list
+    const played = JSON.parse(localStorage.getItem(playedKey) || '[]');
+    if (!played.includes(playing.id)) {
+      played.push(playing.id);
+      localStorage.setItem(playedKey, JSON.stringify(played));
+    }
+
+    // Remove from queue cache
+    try {
+      const cached  = JSON.parse(localStorage.getItem(queueCacheKey) || '[]');
+      const updated = cached.filter(s => s.id !== playing.id);
+      localStorage.setItem(queueCacheKey, JSON.stringify(updated));
+    } catch {}
+
     publishMusicEvent({
       roomId, userId: user?.uid || 'guest',
       songId: playing?.video_id || playing?.id || '',
@@ -239,22 +281,55 @@ export default function RoomView({ roomId, user, onLeave }) {
 
     const rest     = current.filter(t => t.id !== playing?.id).sort((a, b) => b.score - a.score);
     const nextSong = rest[0];
-    if (!nextSong) return;
-
+    if (!nextSong) {
+      startedRef.current = false;
+      setIsLive(false);
+      return;
+    }
     const newQueue = rest.map((t, i) => ({ ...t, playing: i === 0 }));
     setQueue(newQueue);
     handleSongStart(nextSong, nextOrder);
-  }, [roomId, user, handleSongStart]);
+  }, [roomId, user, handleSongStart, playedKey, queueCacheKey]);
 
   // ── ML recommendations listener ───────────────────────────
   useEffect(() => {
     if (!roomId) return;
+
     const unsub = onSnapshot(
       collection(mlDb, 'sessions', sessionId, 'recommendations'),
       (snap) => {
-        if (snap.empty) return;
-        const recs = snap.docs.map((d) => {
-          const existing = queueRef.current.find(q => q.id === d.id);
+        const played = JSON.parse(localStorage.getItem(playedKey) || '[]');
+
+        // Firestore deleted old batch — keep showing cached queue!
+        if (snap.empty) {
+          console.log('[Queue] Firestore empty — keeping cached queue intact');
+          return;
+        }
+
+        const allDocs = snap.docs.map(d => d.id);
+        const allNew  = allDocs.every(id => !played.includes(id));
+
+        // New batch of 30 arrived!
+        if (allNew && allDocs.length > 5 && played.length > 0) {
+          console.log('[Queue] New batch detected! Clearing cache for fresh start');
+          localStorage.removeItem(playedKey);
+          localStorage.removeItem(queueCacheKey);
+          startedRef.current = false;
+          setIsLive(false);
+        }
+
+        // Re-read played after potential reset
+        const playedNow = JSON.parse(localStorage.getItem(playedKey) || '[]');
+
+        // Get cached queue (songs Firestore may have already deleted)
+        const cachedNow = (() => {
+          try { return JSON.parse(localStorage.getItem(queueCacheKey) || '[]'); } catch { return []; }
+        })();
+
+        // Map Firestore songs
+        const firestoreSongs = snap.docs.map((d) => {
+          const existing = queueRef.current.find(q => q.id === d.id)
+                        || cachedNow.find(q => q.id === d.id);
           return {
             id:       d.id,
             title:    d.data().track_title  || d.data().song_name || d.data().title || 'Unknown',
@@ -269,23 +344,39 @@ export default function RoomView({ roomId, user, onLeave }) {
           };
         });
 
-        recs.sort((a, b) => b.score - a.score);
+        // Keep cached songs that Firestore deleted but haven't been played yet
+        const firestoreIds   = new Set(firestoreSongs.map(s => s.id));
+        const survivingSongs = cachedNow.filter(
+          s => !firestoreIds.has(s.id) && !playedNow.includes(s.id)
+        );
 
+        // Merge: Firestore + surviving cached, remove played
+        const allSongs = [...firestoreSongs, ...survivingSongs]
+          .filter(s => !playedNow.includes(s.id));
+
+        if (allSongs.length === 0) return;
+
+        allSongs.sort((a, b) => b.score - a.score);
+
+        // Preserve currently playing song at top
         const currentPlaying = queueRef.current.find(t => t.playing);
         if (currentPlaying) {
-          const idx = recs.findIndex(r => r.id === currentPlaying.id);
+          const idx = allSongs.findIndex(r => r.id === currentPlaying.id);
           if (idx > 0) {
-            const [p] = recs.splice(idx, 1);
+            const [p] = allSongs.splice(idx, 1);
             p.playing = true;
-            recs.unshift(p);
+            allSongs.unshift(p);
           } else if (idx === 0) {
-            recs[0].playing = true;
+            allSongs[0].playing = true;
           }
-        } else if (recs.length > 0) {
-          recs[0].playing = true;
+        } else if (allSongs.length > 0) {
+          allSongs[0].playing = true;
         }
 
-        setQueue(recs);
+        // Save merged queue to localStorage cache
+        localStorage.setItem(queueCacheKey, JSON.stringify(allSongs));
+
+        setQueue(allSongs);
         setIsLive(true);
         isFirstLoad.current = false;
       },
@@ -295,12 +386,12 @@ export default function RoomView({ roomId, user, onLeave }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
-  // ── Start first song only when ML arrives ─────────────────
+  // ── Start song when ML arrives or new batch arrives ───────
   useEffect(() => {
     if (startedRef.current || !isLive || queue.length === 0) return;
     startedRef.current = true;
     const first = queue.find(t => t.playing) || queue[0];
-    handleSongStart(first, 1);
+    handleSongStart(first, playOrderRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLive, queue]);
 
@@ -320,15 +411,13 @@ export default function RoomView({ roomId, user, onLeave }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
-  // ── Room members + host + NOW PLAYING SYNC ───────────────
+  // ── Room members + host + NOW PLAYING SYNC for ALL users ──
   useEffect(() => {
     if (!roomId) return;
     const unsub = onSnapshot(doc(db, 'rooms', roomId), (snap) => {
       if (!snap.exists()) return;
       const data = snap.data();
       setHostUid(data.host_uid || null);
-
-      // If room ended by host — kick all users out
       if (data.status === 'ended') {
         sessionStorage.removeItem('auxless_room');
         onLeave();
@@ -337,8 +426,22 @@ export default function RoomView({ roomId, user, onLeave }) {
 
       const np = data.now_playing;
       if (np?.video_id) {
+        setIsLive(true);
+        startedRef.current = true;
+        setSessionStarted(true);
+
         setNowPlaying(prev => {
           if (prev?.video_id !== np.video_id) {
+            setQueue(q => {
+              if (!q.length) return q;
+              const updated = q.map(t => ({
+                ...t,
+                playing: t.video_id === np.video_id || t.id === np.video_id,
+              }));
+              const playing = updated.find(t => t.playing);
+              const rest    = updated.filter(t => !t.playing).sort((a, b) => b.score - a.score);
+              return playing ? [playing, ...rest] : updated;
+            });
             return {
               id:         np.video_id,
               video_id:   np.video_id,
@@ -367,25 +470,40 @@ export default function RoomView({ roomId, user, onLeave }) {
     return () => unsub();
   }, [roomId, onLeave]);
 
+  // ── Host start session ────────────────────────────────────
+  const handleStartSession = async () => {
+    if (!isHost) return;
+    try {
+      await updateDoc(doc(mlDb, 'sessions', sessionId), { status: 'pending' });
+      const url = process.env.REACT_APP_CLOUD_FUNCTION_URL;
+      if (url) {
+        fetch(`${url}/start_session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId }),
+        }).catch(() => {});
+      }
+      setSessionStarted(true);
+      toast.success('Session started! ML is fetching all playlists… 🚀');
+    } catch (e) {
+      console.warn('Start session failed:', e);
+      toast.error('Failed to start session');
+    }
+  };
+
   // ── Vote — one vote per user per song ─────────────────────
   const vote = async (id, type) => {
     const action = type === 'likes' ? 'like' : 'dislike';
     const delta  = WEIGHTS[action];
     const track  = queue.find(t => t.id === id);
     const uid    = user?.uid || 'guest';
-
-    // Check if user already voted on this song
     const voteKey = `vote_${sessionId}_${uid}_${id}`;
     const alreadyVoted = localStorage.getItem(voteKey);
     if (alreadyVoted) {
       toast.error('You already voted on this song!', { duration: 1500 });
       return;
     }
-
-    // Save vote so user can't vote again
     localStorage.setItem(voteKey, action);
-
-    // Optimistic UI
     setQueue(q => {
       const updated = q.map(t =>
         t.id === id ? { ...t, [type]: t[type] + 1, score: +(t.score + delta).toFixed(1) } : t
@@ -394,28 +512,20 @@ export default function RoomView({ roomId, user, onLeave }) {
       const rest    = updated.filter(t => !t.playing).sort((a, b) => b.score - a.score);
       return playing ? [playing, ...rest] : updated.sort((a, b) => b.score - a.score);
     });
-
     try {
-      // Save to recommendation doc
       const recRef = doc(mlDb, 'sessions', sessionId, 'recommendations', id);
       await updateDoc(recRef, {
         like_count:    action === 'like'    ? increment(1) : increment(0),
         dislike_count: action === 'dislike' ? increment(1) : increment(0),
         final_score:   increment(delta),
       }).catch(() => {});
-
-      // Streaming pipeline event
       await publishMusicEvent({
         roomId, userId: uid, songId: id,
         eventType: action, songName: track?.title || '', artist: track?.artist || '',
       });
-
-      // liked_flag for ML GRU
       if (action === 'like' && songEventIdRef.current) {
         await updateLikedFlag({ roomId, songEventId: songEventIdRef.current });
       }
-
-      // user_feedback
       const fbRef = doc(mlDb, 'sessions', sessionId, 'user_feedback', `${uid}_${id}`);
       await updateDoc(fbRef, {
         action, score_delta: delta, last_updated: serverTimestamp(), user_id: uid, video_id: id,
@@ -429,22 +539,16 @@ export default function RoomView({ roomId, user, onLeave }) {
     }
   };
 
-  // ── Host end room — kills session for everyone ────────────
+  // ── Host end room ─────────────────────────────────────────
   const handleEndRoom = async () => {
     if (!isHost) return;
     try {
-      // Kill session in ML Firestore
       await updateDoc(doc(mlDb, 'sessions', sessionId), {
-        status:    'ended',
-        ended_at:  serverTimestamp(),
+        status: 'ended', ended_at: serverTimestamp(),
       }).catch(() => {});
-
-      // Kill room in your Firestore — this triggers onSnapshot for ALL users
       await updateDoc(doc(db, 'rooms', roomId), {
-        status:   'ended',
-        ended_at: serverTimestamp(),
+        status: 'ended', ended_at: serverTimestamp(),
       });
-
       toast.success('Room ended!');
     } catch (e) {
       console.warn('End room failed:', e);
@@ -460,10 +564,19 @@ export default function RoomView({ roomId, user, onLeave }) {
       try {
         const snap = await getDoc(doc(db, 'rooms', roomId));
         if (snap.exists()) {
-          const updated = (snap.data().users || []).map(u =>
-            u.uid === user.uid ? { ...u, isactive: false } : u
-          );
-          await updateDoc(doc(db, 'rooms', roomId), { users: updated });
+          if (isHost) {
+            await updateDoc(doc(db, 'rooms', roomId), {
+              status: 'ended', ended_at: serverTimestamp(),
+            });
+            await updateDoc(doc(mlDb, 'sessions', sessionId), {
+              status: 'ended', ended_at: serverTimestamp(),
+            }).catch(() => {});
+          } else {
+            const updated = (snap.data().users || []).map(u =>
+              u.uid === user.uid ? { ...u, isactive: false } : u
+            );
+            await updateDoc(doc(db, 'rooms', roomId), { users: updated });
+          }
         }
       } catch {}
     }
@@ -477,17 +590,13 @@ export default function RoomView({ roomId, user, onLeave }) {
     <div style={{ minHeight:'100vh', background:T.bg, color:T.text, fontFamily:'system-ui,sans-serif' }}>
       <Blobs />
       {showShare && <ShareModal roomId={code} onClose={() => setShowShare(false)} />}
-
-      {/* YouTube player */}
       <YouTubePlayer videoId={isLive ? now?.video_id : null} startedAt={now?.started_at} onEnd={handleSongEnd} />
 
-      {/* Nav */}
       <nav style={{ position:'sticky', top:0, zIndex:50, display:'flex', alignItems:'center',
         justifyContent:'space-between', padding:'0 20px', height:58,
         borderBottom:`1px solid ${T.border}`, backdropFilter:'blur(18px)', background:'rgba(8,8,15,.88)' }}>
         <div style={{ display:'flex', alignItems:'center', gap:9 }}>
-          <div style={{ width:28, height:28, borderRadius:8,
-            background:`linear-gradient(135deg,${T.green},${T.purple})`,
+          <div style={{ width:28, height:28, borderRadius:8, background:`linear-gradient(135deg,${T.green},${T.purple})`,
             display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>♫</div>
           <span style={{ fontWeight:900, fontSize:15, letterSpacing:'-0.4px' }}>AuxLess</span>
           {isHost && <span style={{ padding:'2px 8px', borderRadius:999, background:T.purpleLo,
@@ -511,7 +620,6 @@ export default function RoomView({ roomId, user, onLeave }) {
 
       <div style={{ maxWidth:680, margin:'0 auto', padding:'20px 16px 80px', position:'relative', zIndex:1 }}>
 
-        {/* Session info */}
         <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
           {[
             { icon:'🎵', label:'Song',    val: playOrder },
@@ -526,15 +634,23 @@ export default function RoomView({ roomId, user, onLeave }) {
           ))}
         </div>
 
-        {/* Host controls */}
         {isHost && (
           <div className="fade-up" style={{ background:T.purpleLo, borderRadius:14,
             border:`1px solid ${T.purple}33`, padding:'14px 18px', marginBottom:14 }}>
             <div style={{ fontSize:11, fontWeight:700, color:T.purple, letterSpacing:'.08em', marginBottom:10 }}>👑 HOST CONTROLS</div>
             <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-              <button onClick={() => { handleSongEnd(); toast.success('Skipped!'); }}
-                style={{ padding:'7px 14px', borderRadius:8, fontSize:12, fontWeight:600,
-                  background:T.purpleLo, border:`1px solid ${T.purple}44`, color:T.purple, cursor:'pointer' }}>⏭ Skip track</button>
+              {!isLive && !sessionStarted && (
+                <button onClick={handleStartSession}
+                  style={{ padding:'7px 14px', borderRadius:8, fontSize:12, fontWeight:600,
+                    background:T.greenLo, border:`1px solid ${T.green}44`, color:T.green, cursor:'pointer' }}>
+                  🚀 Start Session
+                </button>
+              )}
+              {isLive && (
+                <button onClick={() => { handleSongEnd(); toast.success('Skipped!'); }}
+                  style={{ padding:'7px 14px', borderRadius:8, fontSize:12, fontWeight:600,
+                    background:T.purpleLo, border:`1px solid ${T.purple}44`, color:T.purple, cursor:'pointer' }}>⏭ Skip track</button>
+              )}
               <button onClick={() => setShowShare(true)}
                 style={{ padding:'7px 14px', borderRadius:8, fontSize:12, fontWeight:600,
                   background:T.greenLo, border:`1px solid ${T.green}44`, color:T.green, cursor:'pointer' }}>🔗 Invite guests</button>
@@ -542,10 +658,19 @@ export default function RoomView({ roomId, user, onLeave }) {
                 style={{ padding:'7px 14px', borderRadius:8, fontSize:12, fontWeight:600,
                   background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.2)', color:'#EF4444', cursor:'pointer' }}>🚪 End room</button>
             </div>
+            {!isLive && sessionStarted && (
+              <div style={{ marginTop:10, fontSize:12, color:T.green }}>
+                ✅ Pipeline started! Fetching all playlists… wait 2-5 mins
+              </div>
+            )}
+            {!isLive && !sessionStarted && (
+              <div style={{ marginTop:10, fontSize:12, color:T.muted }}>
+                👆 Wait for guests to join, then click Start Session
+              </div>
+            )}
           </div>
         )}
 
-        {/* Now Playing */}
         {isLive && now && (
           <div className="fade-up" style={{ background:`linear-gradient(135deg,${T.card},rgba(29,185,84,0.07))`,
             borderRadius:20, border:`1px solid ${T.green}33`, padding:'20px', marginBottom:14 }}>
@@ -569,7 +694,6 @@ export default function RoomView({ roomId, user, onLeave }) {
           </div>
         )}
 
-        {/* Members */}
         <div style={{ marginBottom:14 }}>
           <div style={{ fontSize:11, fontWeight:700, color:T.muted, textTransform:'uppercase', letterSpacing:'.09em', marginBottom:10 }}>
             In the room · {members.length} active
@@ -591,7 +715,6 @@ export default function RoomView({ roomId, user, onLeave }) {
           </div>
         </div>
 
-        {/* Tabs */}
         <div style={{ display:'flex', background:T.surface, borderRadius:12, padding:4,
           border:`1px solid ${T.border}`, marginBottom:12 }}>
           {['queue','analytics'].map(t => (
@@ -603,16 +726,20 @@ export default function RoomView({ roomId, user, onLeave }) {
           ))}
         </div>
 
-        {/* Queue */}
         {rtab==='queue' && (
           <div style={{ display:'flex', flexDirection:'column', gap:8 }} className="fade-up">
             {!isLive ? (
               <div style={{ textAlign:'center', padding:'48px 24px', background:T.card,
                 borderRadius:16, border:`1px solid ${T.border}` }}>
                 <div style={{ fontSize:48, marginBottom:16 }}>🧠</div>
-                <div style={{ fontSize:16, fontWeight:700, color:T.text, marginBottom:8 }}>Fetching your playlists…</div>
+                <div style={{ fontSize:16, fontWeight:700, color:T.text, marginBottom:8 }}>
+                  {sessionStarted ? 'Fetching your playlists…' : 'Waiting for host to start session…'}
+                </div>
                 <div style={{ fontSize:13, color:T.muted, marginBottom:20, lineHeight:1.6 }}>
-                  ML is analysing everyone's taste and building your queue.<br />This takes 2–5 minutes on first load.
+                  {sessionStarted
+                    ? 'ML is analysing everyone\'s taste and building your queue. This takes 2–5 minutes.'
+                    : 'The host will start the session once everyone has joined the room.'
+                  }
                 </div>
                 <div style={{ display:'flex', justifyContent:'center', gap:6 }}>
                   {[0,1,2].map(i => (
@@ -623,7 +750,7 @@ export default function RoomView({ roomId, user, onLeave }) {
               </div>
             ) : (
               queue.map((t) => {
-                const uid = user?.uid || 'guest';
+                const uid     = user?.uid || 'guest';
                 const voteKey = `vote_${sessionId}_${uid}_${t.id}`;
                 const hasVoted = localStorage.getItem(voteKey);
                 return (
@@ -642,20 +769,16 @@ export default function RoomView({ roomId, user, onLeave }) {
                       {(t.score||0)>0?'+':''}{(t.score||0).toFixed ? t.score.toFixed(2) : t.score}
                     </span>
                     <div style={{ display:'flex', gap:5, flexShrink:0 }}>
-                      <button onClick={() => vote(t.id,'likes')}
-                        disabled={!!hasVoted}
-                        style={{ display:'flex', alignItems:'center',
-                          gap:3, padding:'5px 9px', borderRadius:8,
+                      <button onClick={() => vote(t.id,'likes')} disabled={!!hasVoted}
+                        style={{ display:'flex', alignItems:'center', gap:3, padding:'5px 9px', borderRadius:8,
                           background: hasVoted === 'like' ? T.green+'33' : T.greenLo,
                           border:`1px solid ${T.green}33`, color:T.green, fontSize:12, fontWeight:700,
                           cursor: hasVoted ? 'not-allowed' : 'pointer',
                           opacity: hasVoted && hasVoted !== 'like' ? 0.4 : 1 }}>
                         👍 {t.likes}
                       </button>
-                      <button onClick={() => vote(t.id,'dislikes')}
-                        disabled={!!hasVoted}
-                        style={{ display:'flex', alignItems:'center',
-                          gap:3, padding:'5px 9px', borderRadius:8,
+                      <button onClick={() => vote(t.id,'dislikes')} disabled={!!hasVoted}
+                        style={{ display:'flex', alignItems:'center', gap:3, padding:'5px 9px', borderRadius:8,
                           background: hasVoted === 'dislike' ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.1)',
                           border:'1px solid rgba(239,68,68,0.2)', color:'#EF4444', fontSize:12, fontWeight:700,
                           cursor: hasVoted ? 'not-allowed' : 'pointer',
@@ -670,7 +793,6 @@ export default function RoomView({ roomId, user, onLeave }) {
           </div>
         )}
 
-        {/* Analytics */}
         {rtab==='analytics' && (
           <div className="fade-up" style={{ display:'flex', flexDirection:'column', gap:12 }}>
             <div style={{ background:T.card, borderRadius:16, border:`1px solid ${T.border}`, padding:'18px 20px' }}>

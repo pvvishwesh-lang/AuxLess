@@ -27,6 +27,12 @@ export default function TabCreate({ user, onEnterRoom }) {
       const code    = 'AUX-' + hash;
       const session = hash.toLowerCase();
 
+      // Get user's own refresh token
+      const refreshToken = user?.refreshToken
+        || localStorage.getItem('auxless_refresh_token')
+        || process.env.REACT_APP_YOUTUBE_REFRESH_TOKEN
+        || '';
+
       // 1. YOUR Firestore — await this
       await setDoc(doc(db, 'rooms', code), {
         code,
@@ -51,16 +57,16 @@ export default function TabCreate({ user, onEnterRoom }) {
         }],
       });
 
-      // 2. ML Firestore — NO await, background
+      // 2. ML Firestore — status: waiting so pipeline doesn't trigger yet
       setDoc(doc(mlDb, 'sessions', session), {
         session_id:    session,
         room_code:     code,
-        status:        'pending',
+        status: 'pending',
         createdAt:     Date.now(),
         users: [{
           user_id:       user?.uid  || 'guest',
           isactive:      true,
-          refresh_token: process.env.REACT_APP_YOUTUBE_REFRESH_TOKEN || '',
+          refresh_token: refreshToken,
           last_active:   new Date(),
           genres:        user?.genres  || [],
           artists:       user?.artists || [],
@@ -115,7 +121,7 @@ export default function TabCreate({ user, onEnterRoom }) {
             {user?.artists?.length > 0 && (
               <div style={{ fontSize: 12, color: T.muted }}>Artists: <b style={{ color: T.text }}>{user.artists.slice(0, 3).join(', ')}</b></div>
             )}
-            <div style={{ fontSize: 11, color: T.muted, marginTop: 8 }}>Pipeline triggered! Fetching playlists + running ML… 🚀</div>
+            <div style={{ fontSize: 11, color: T.muted, marginTop: 8 }}>Share the code with guests then click Start Session! 🚀</div>
           </div>
         )}
         <Btn onClick={() => onEnterRoom(roomCode)} full icon="🎵">Enter room →</Btn>

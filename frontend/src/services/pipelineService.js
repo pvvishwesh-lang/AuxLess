@@ -7,7 +7,6 @@ import {
   increment, serverTimestamp,
 } from 'firebase/firestore';
 
-// Convert AUX-3CBBE8A2 → 3cbbe8a2
 const toSid = (roomId) => (roomId || '').replace(/^AUX-/i, '').toLowerCase();
 
 export async function publishMusicEvent({ roomId, userId, songId, eventType, songName, artist }) {
@@ -71,7 +70,6 @@ export async function incrementSongsPlayed({ roomId, playOrder }) {
       current_play_order: playOrder,
     });
   } catch (e) {
-    // doc doesn't exist yet — create it
     try {
       await setDoc(doc(mlDb, 'sessions', sid, 'metadata', 'state'), {
         songs_played_count: 1,
@@ -101,10 +99,10 @@ export async function endSession({ roomId, sessionNum }) {
     setTimeout(async () => {
       try {
         await updateDoc(doc(mlDb, 'sessions', sid, 'metadata', 'state'), {
-          status:             'active',
-          session_number:     newNum,
-          songs_played_count: 0,
-          started_at:         serverTimestamp(),
+          status:         'active',
+          session_number: newNum,
+          started_at:     serverTimestamp(),
+          // songs_played_count removed — don't reset mid-session!
         });
         console.log(`[ML] ✅ New session #${newNum} started`);
       } catch (e) {

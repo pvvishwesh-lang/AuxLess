@@ -2,38 +2,41 @@ import {
   signInWithPopup,
   signOut,
   onAuthStateChanged,
+  GoogleAuthProvider,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { auth, db, provider, mlDb } from '../config/firebase';
+import { auth, db, mlDb, provider } from '../config/firebase';
 
-// ── Add YouTube scope to get refresh token ────────────────────
+// Add YouTube scope
 provider.addScope('https://www.googleapis.com/auth/youtube.readonly');
-provider.setCustomParameters({ access_type: 'offline' });
+provider.setCustomParameters({ 
+  access_type: 'offline',
+  prompt: 'consent',
+});
 
-// ── Google sign-in popup ──────────────────────────────────────
 export const signInWithGoogle = async () => {
   const result = await signInWithPopup(auth, provider);
   const user   = result.user;
 
-  // ── Get YouTube refresh token from OAuth result ───────────
-  const credential     = result._tokenResponse;
-  const refreshToken   = credential?.refreshToken || result._tokenResponse?.oauthRefreshToken || '';
+  const credential   = GoogleAuthProvider.credentialFromResult(result);
+  const refreshToken = result._tokenResponse?.refreshToken 
+    || result._tokenResponse?.oauthRefreshToken
+    || credential?.accessToken
+    || '';
 
-  // get Firebase JWT id token
+  console.log('[Auth] Refresh token captured:', refreshToken ? '✅' : '❌');
+
   const token = await user.getIdToken();
   localStorage.setItem('auxless_jwt', token);
 
-  // save refresh token locally too
   if (refreshToken) {
     localStorage.setItem('auxless_refresh_token', refreshToken);
   }
 
-  // check if user already exists in YOUR Firestore
   const userRef = doc(db, 'users', user.uid);
   const snap    = await getDoc(userRef);
 
   if (!snap.exists()) {
-    // NEW USER — create doc with onboarded: false
     await setDoc(userRef, {
       uid:          user.uid,
       name:         user.displayName,
@@ -43,8 +46,28 @@ export const signInWithGoogle = async () => {
       artists:      [],
       createdAt:    Date.now(),
       onboarded:    false,
-      refreshToken: refreshToken, // save for reference
+      refreshToken: refreshToken,
     });
+  } else if (refreshToken) {
+    await setDoc(userRef, { refreshToken }, { merge: true });
+  }
+
+  // Also save to ML Firestore immediately on sign in
+  if (refreshToken) {
+    try {
+      await setDoc(
+        doc(mlDb, 'user_tokens', user.uid),
+        {
+          user_id:       user.uid,
+          refresh_token: refreshToken,
+          updatedAt:     Date.now(),
+        },
+        { merge: true }
+      );
+      console.log('[Auth] ✅ YouTube token saved to ML Firestore');
+    } catch (e) {
+      console.warn('[Auth] ML token save failed:', e.message);
+    }
   }
 
   return {
@@ -66,20 +89,17 @@ export const signInWithGoogle = async () => {
   };
 };
 
-// ── Save onboarding prefs + refresh token to both Firestores ──
 export const saveUserPrefs = async (uid, genres, artists) => {
   const refreshToken = localStorage.getItem('auxless_refresh_token') || '';
 
-  // 1. Save to YOUR Firestore — users collection
+  // 1. Save to YOUR Firestore
   await setDoc(
     doc(db, 'users', uid),
     { genres, artists, onboarded: true, refreshToken },
     { merge: true }
   );
 
-  // 2. Save refresh token to NIKHIL'S Firestore — so pipeline can use it!
-  // Pipeline reads refresh_token from sessions/{id}/users array
-  // We store it in a users collection for easy lookup
+  // 2. Save to ML Firestore — pipeline reads from here!
   try {
     await setDoc(
       doc(mlDb, 'user_tokens', uid),
@@ -92,19 +112,45 @@ export const saveUserPrefs = async (uid, genres, artists) => {
       },
       { merge: true }
     );
-    console.log('[Auth] ✅ Refresh token saved to ML Firestore');
+    console.log('[Auth] ✅ YouTube token saved to ML Firestore');
   } catch (e) {
-    console.warn('[Auth] ML Firestore token save failed:', e.message);
+    console.warn('[Auth] ML token save failed:', e.message);
   }
 };
 
-// ── Sign out ──────────────────────────────────────────────────
 export const logoutUser = async () => {
   await signOut(auth);
   localStorage.removeItem('auxless_jwt');
   localStorage.removeItem('auxless_refresh_token');
 };
+export const exchangeCodeForToken = async (code) => {
+  try {
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id:     '863487778360-b0529i5rrliv5duo7f0j11bur369qo28.apps.googleusercontent.com',
+        client_secret: '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',
+        redirect_uri:  window.location.origin,
+        grant_type:    'authorization_code',
+      }),
+    });
+    const data = await response.json();
+    console.log('[Auth] Token exchange response:', data);
+    return data.refresh_token || '';
+  } catch (e) {
+    console.warn('[Auth] Token exchange failed:', e);
+    return '';
+  }
+};
 
-// ── Auth state listener ───────────────────────────────────────
+export const getYouTubeAuthUrl = () => {
+  const clientId    = '863487778360-b0529i5rrliv5duo7f0j11bur369qo28.apps.googleusercontent.com';
+  const redirectUri = encodeURIComponent(window.location.origin);
+  const scope       = encodeURIComponent('https://www.googleapis.com/auth/youtube.readonly');
+  return `https://accounts.google.com/o/oauth2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&access_type=offline&prompt=consent`;
+};
+
 export const listenAuth = (callback) =>
   onAuthStateChanged(auth, callback);

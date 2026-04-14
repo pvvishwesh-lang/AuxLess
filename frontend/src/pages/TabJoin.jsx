@@ -5,8 +5,15 @@ import Btn from '../components/Btn';
 import { db, mlDb } from '../config/firebase';
 import { doc, getDoc, updateDoc, arrayUnion, setDoc } from 'firebase/firestore';
 
-// Convert AUX-7749 → 7749 (lowercase, no AUX- prefix) — matches Nikhil's session_id
 const toSessionId = (code) => (code || '').replace(/^AUX-/i, '').toLowerCase();
+
+const connectYouTube = (roomCode) => {
+  const clientId    = '863487778360-b0529i5rrliv5duo7f0j11bur369qo28.apps.googleusercontent.com';
+  const redirectUri = encodeURIComponent(window.location.origin);
+  const scope       = encodeURIComponent('https://www.googleapis.com/auth/youtube.readonly');
+  sessionStorage.setItem('pending_join_code', roomCode);
+  window.location.href = `https://accounts.google.com/o/oauth2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&access_type=offline&prompt=consent`;
+};
 
 export default function TabJoin({ user, onEnterRoom }) {
   const [code,    setCode]    = useState('');
@@ -21,8 +28,20 @@ export default function TabJoin({ user, onEnterRoom }) {
     const roomCode  = code.startsWith('AUX-') ? code : `AUX-${code}`;
     const sessionId = toSessionId(roomCode);
 
+    // Get user's own refresh token — never use fallback env token
+    const refreshToken = user?.refreshToken
+      || localStorage.getItem('auxless_refresh_token')
+      || process.env.REACT_APP_YOUTUBE_REFRESH_TOKEN
+      || '';
+
+    // If no YouTube token — redirect to connect first
+    if (!user?.refreshToken && !localStorage.getItem('auxless_refresh_token')) {
+      setJoining(false);
+      connectYouTube(roomCode);
+      return;
+    }
+
     try {
-      // Check room in YOUR Firestore (db)
       const roomRef  = doc(db, 'rooms', roomCode);
       const roomSnap = await getDoc(roomRef);
 
@@ -37,11 +56,11 @@ export default function TabJoin({ user, onEnterRoom }) {
         return;
       }
 
-      const uid      = user?.uid || `guest_${Date.now()}`;
+      const uid       = user?.uid || `guest_${Date.now()}`;
       const alreadyIn = roomData.users?.some(u => u.uid === uid);
 
       if (!alreadyIn) {
-        // 1. Add user to room → YOUR Firestore (db)
+        // 1. Add user to room → YOUR Firestore
         await updateDoc(roomRef, {
           users: arrayUnion({
             uid,
@@ -56,8 +75,7 @@ export default function TabJoin({ user, onEnterRoom }) {
           }),
         });
 
-        // 2. Add user to session → NIKHIL'S Firestore (mlDb)
-        // Uses sessionId (lowercase hash) not roomCode
+        // 2. Add user to session → ML Firestore with their own token
         const sessionRef  = doc(mlDb, 'sessions', sessionId);
         const sessionSnap = await getDoc(sessionRef);
 
@@ -66,14 +84,13 @@ export default function TabJoin({ user, onEnterRoom }) {
             users: arrayUnion({
               user_id:       uid,
               isactive:      true,
-              refresh_token: process.env.REACT_APP_YOUTUBE_REFRESH_TOKEN || '',
+              refresh_token: refreshToken,
               last_active:   new Date(),
               genres:        user?.genres  || [],
               artists:       user?.artists || [],
             }),
           });
         } else {
-          // Session doesn't exist — create it (triggers pipeline)
           await setDoc(sessionRef, {
             session_id: sessionId,
             room_code:  roomCode,
@@ -82,7 +99,7 @@ export default function TabJoin({ user, onEnterRoom }) {
             users: [{
               user_id:       uid,
               isactive:      true,
-              refresh_token: process.env.REACT_APP_YOUTUBE_REFRESH_TOKEN || '',
+              refresh_token: refreshToken,
               last_active:   new Date(),
               genres:        user?.genres  || [],
               artists:       user?.artists || [],
@@ -114,14 +131,18 @@ export default function TabJoin({ user, onEnterRoom }) {
             <span style={{ fontSize: 16 }}>👤</span>
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: T.green }}>Joining as {user.name}</div>
-              <div style={{ fontSize: 11, color: T.muted }}>You will be a guest in this room</div>
+              <div style={{ fontSize: 11, color: T.muted }}>
+                {user?.refreshToken || localStorage.getItem('auxless_refresh_token')
+                  ? '✅ YouTube connected'
+                  : '⚠️ YouTube not connected — will connect on join'}
+              </div>
             </div>
           </div>
         )}
         <input
           value={code}
           onChange={e => { setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '')); setError(''); }}
-          placeholder="AUX-XXXXXXXX" maxLength={13}
+          placeholder="AUX-XXXX" maxLength={8}
           onKeyDown={e => e.key === 'Enter' && join()}
           style={{ width: '100%', padding: '14px 0', textAlign: 'center',
             background: 'rgba(255,255,255,0.04)',
@@ -130,7 +151,7 @@ export default function TabJoin({ user, onEnterRoom }) {
             fontWeight: 700, letterSpacing: '0.18em', transition: 'border-color .2s' }}
         />
         {error && <p style={{ fontSize: 12, color: '#EF4444', textAlign: 'center', margin: 0 }}>{error}</p>}
-        <p style={{ fontSize: 12, color: T.muted }}>Format: AUX-XXXXXXXX · Press Enter or tap Join</p>
+        <p style={{ fontSize: 12, color: T.muted }}>Format: AUX-XXXX · Press Enter or tap Join</p>
         <Btn onClick={join} disabled={code.length < 3 || joining} full icon={joining ? '' : '🔑'}>
           {joining
             ? <><span style={{ display: 'inline-block', width: 14, height: 14, border: '2px solid rgba(0,0,0,.3)', borderTopColor: '#000', borderRadius: '50%', animation: 'spin .7s linear infinite' }} />Joining…</>

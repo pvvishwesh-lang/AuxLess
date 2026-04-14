@@ -20,7 +20,7 @@ import { db, mlDb } from '../config/firebase';
 import {
   collection, doc, onSnapshot,
   updateDoc, increment, addDoc,
-  serverTimestamp, setDoc, getDoc,
+  serverTimestamp, getDoc,
 } from 'firebase/firestore';
 
 const WEIGHTS           = { like: 2, dislike: -2, skip: -0.5, replay: 1.5, play: 0, complete: 0.5 };
@@ -44,7 +44,6 @@ function YouTubePlayer({ videoId, startedAt, onEnd }) {
         playerVars: { autoplay: 1, controls: 0, rel: 0, playsinline: 1 },
         events: {
           onReady: (e) => {
-            // Seek to correct position so guest syncs with host
             if (startedAt) {
               const elapsed = Math.floor((Date.now() - startedAt) / 1000);
               if (elapsed > 0) e.target.seekTo(elapsed, true);
@@ -98,7 +97,7 @@ function YouTubePlayer({ videoId, startedAt, onEnd }) {
 
 // ── Share Modal ────────────────────────────────────────────────
 function ShareModal({ roomId, onClose }) {
-  const link = `https://auxless.app/join/${roomId}`;
+  const link = `https://auxless-frontend-d9lf.vercel.app`;
   const copy = (text) => { navigator.clipboard?.writeText(text).catch(() => {}); toast.success('Copied!'); };
   return (
     <div style={{ position:'fixed', inset:0, zIndex:200, background:'rgba(0,0,0,0.75)',
@@ -159,7 +158,7 @@ export default function RoomView({ roomId, user, onLeave }) {
   const [sessionNum,         setSessionNum]         = useState(1);
   const [playOrder,          setPlayOrder]          = useState(1);
   const [currentSongEventId, setCurrentSongEventId] = useState(null);
-  const [nowPlaying,         setNowPlaying]         = useState(null); // current song object
+  const [nowPlaying,         setNowPlaying]         = useState(null);
 
   const playOrderRef   = useRef(1);
   const queueRef       = useRef([]);
@@ -181,12 +180,11 @@ export default function RoomView({ roomId, user, onLeave }) {
     if (roomId) sessionStorage.setItem('auxless_room', roomId);
   }, [roomId]);
 
-  // ── Song start — write current song to Firestore so all users sync ──
+  // ── Song start ──────────────────────────────────────────────
   const handleSongStart = useCallback(async (song, order) => {
     if (!song) return;
     setNowPlaying(song);
 
-    // Write currently playing song to room doc so guests sync instantly
     if (roomId) {
       try {
         await updateDoc(doc(db, 'rooms', roomId), {
@@ -196,7 +194,7 @@ export default function RoomView({ roomId, user, onLeave }) {
             artist:     song.artist   || '',
             genre:      song.genre    || '',
             score:      song.score    || 0,
-            started_at: Date.now(),   // timestamp so guests can seek to right position
+            started_at: Date.now(),
           }
         });
       } catch {}
@@ -228,7 +226,6 @@ export default function RoomView({ roomId, user, onLeave }) {
     const current = queueRef.current;
     if (!current || current.length < 2) return;
 
-    // Publish complete event
     const playing = current.find(t => t.playing) || current[0];
     publishMusicEvent({
       roomId, userId: user?.uid || 'guest',
@@ -240,7 +237,6 @@ export default function RoomView({ roomId, user, onLeave }) {
     setPlayOrder(nextOrder);
     playOrderRef.current = nextOrder;
 
-    // Remove played song, sort rest by score, highest plays next
     const rest     = current.filter(t => t.id !== playing?.id).sort((a, b) => b.score - a.score);
     const nextSong = rest[0];
     if (!nextSong) return;
@@ -273,10 +269,8 @@ export default function RoomView({ roomId, user, onLeave }) {
           };
         });
 
-        // Sort by score — highest first
         recs.sort((a, b) => b.score - a.score);
 
-        // Preserve currently playing song position
         const currentPlaying = queueRef.current.find(t => t.playing);
         if (currentPlaying) {
           const idx = recs.findIndex(r => r.id === currentPlaying.id);
@@ -334,20 +328,25 @@ export default function RoomView({ roomId, user, onLeave }) {
       const data = snap.data();
       setHostUid(data.host_uid || null);
 
-      // Sync now_playing for ALL guests — everyone hears same song
+      // If room ended by host — kick all users out
+      if (data.status === 'ended') {
+        sessionStorage.removeItem('auxless_room');
+        onLeave();
+        return;
+      }
+
       const np = data.now_playing;
       if (np?.video_id) {
         setNowPlaying(prev => {
-          // Only update if song changed
           if (prev?.video_id !== np.video_id) {
             return {
-              id:       np.video_id,
-              video_id: np.video_id,
-              title:    np.title  || '',
-              artist:   np.artist || '',
-              genre:    np.genre  || '',
-              score:    np.score  || 0,
-              playing:  true,
+              id:         np.video_id,
+              video_id:   np.video_id,
+              title:      np.title  || '',
+              artist:     np.artist || '',
+              genre:      np.genre  || '',
+              score:      np.score  || 0,
+              playing:    true,
               started_at: np.started_at,
             };
           }
@@ -366,15 +365,27 @@ export default function RoomView({ roomId, user, onLeave }) {
       })));
     }, () => {});
     return () => unsub();
-  }, [roomId]);
+  }, [roomId, onLeave]);
 
-  // ── Vote ──────────────────────────────────────────────────
+  // ── Vote — one vote per user per song ─────────────────────
   const vote = async (id, type) => {
     const action = type === 'likes' ? 'like' : 'dislike';
     const delta  = WEIGHTS[action];
     const track  = queue.find(t => t.id === id);
+    const uid    = user?.uid || 'guest';
 
-    // Optimistic UI — update locally + re-sort queue, NO toast spam
+    // Check if user already voted on this song
+    const voteKey = `vote_${sessionId}_${uid}_${id}`;
+    const alreadyVoted = localStorage.getItem(voteKey);
+    if (alreadyVoted) {
+      toast.error('You already voted on this song!', { duration: 1500 });
+      return;
+    }
+
+    // Save vote so user can't vote again
+    localStorage.setItem(voteKey, action);
+
+    // Optimistic UI
     setQueue(q => {
       const updated = q.map(t =>
         t.id === id ? { ...t, [type]: t[type] + 1, score: +(t.score + delta).toFixed(1) } : t
@@ -383,10 +394,9 @@ export default function RoomView({ roomId, user, onLeave }) {
       const rest    = updated.filter(t => !t.playing).sort((a, b) => b.score - a.score);
       return playing ? [playing, ...rest] : updated.sort((a, b) => b.score - a.score);
     });
-    // No toast for voting — silent update
 
     try {
-      // 1. Save to recommendation doc → persists on refresh
+      // Save to recommendation doc
       const recRef = doc(mlDb, 'sessions', sessionId, 'recommendations', id);
       await updateDoc(recRef, {
         like_count:    action === 'like'    ? increment(1) : increment(0),
@@ -394,19 +404,18 @@ export default function RoomView({ roomId, user, onLeave }) {
         final_score:   increment(delta),
       }).catch(() => {});
 
-      // 2. Streaming pipeline event
+      // Streaming pipeline event
       await publishMusicEvent({
-        roomId, userId: user?.uid || 'guest', songId: id,
+        roomId, userId: uid, songId: id,
         eventType: action, songName: track?.title || '', artist: track?.artist || '',
       });
 
-      // 3. liked_flag for ML GRU
+      // liked_flag for ML GRU
       if (action === 'like' && songEventIdRef.current) {
         await updateLikedFlag({ roomId, songEventId: songEventIdRef.current });
       }
 
-      // 4. user_feedback
-      const uid   = user?.uid || 'guest';
+      // user_feedback
       const fbRef = doc(mlDb, 'sessions', sessionId, 'user_feedback', `${uid}_${id}`);
       await updateDoc(fbRef, {
         action, score_delta: delta, last_updated: serverTimestamp(), user_id: uid, video_id: id,
@@ -417,6 +426,31 @@ export default function RoomView({ roomId, user, onLeave }) {
       });
     } catch (e) {
       console.warn('Vote failed:', e);
+    }
+  };
+
+  // ── Host end room — kills session for everyone ────────────
+  const handleEndRoom = async () => {
+    if (!isHost) return;
+    try {
+      // Kill session in ML Firestore
+      await updateDoc(doc(mlDb, 'sessions', sessionId), {
+        status:    'ended',
+        ended_at:  serverTimestamp(),
+      }).catch(() => {});
+
+      // Kill room in your Firestore — this triggers onSnapshot for ALL users
+      await updateDoc(doc(db, 'rooms', roomId), {
+        status:   'ended',
+        ended_at: serverTimestamp(),
+      });
+
+      toast.success('Room ended!');
+    } catch (e) {
+      console.warn('End room failed:', e);
+    } finally {
+      sessionStorage.removeItem('auxless_room');
+      onLeave();
     }
   };
 
@@ -444,10 +478,10 @@ export default function RoomView({ roomId, user, onLeave }) {
       <Blobs />
       {showShare && <ShareModal roomId={code} onClose={() => setShowShare(false)} />}
 
-      {/* YouTube player — synced for all users */}
+      {/* YouTube player */}
       <YouTubePlayer videoId={isLive ? now?.video_id : null} startedAt={now?.started_at} onEnd={handleSongEnd} />
 
-      {/* ── Nav ── */}
+      {/* Nav */}
       <nav style={{ position:'sticky', top:0, zIndex:50, display:'flex', alignItems:'center',
         justifyContent:'space-between', padding:'0 20px', height:58,
         borderBottom:`1px solid ${T.border}`, backdropFilter:'blur(18px)', background:'rgba(8,8,15,.88)' }}>
@@ -504,7 +538,7 @@ export default function RoomView({ roomId, user, onLeave }) {
               <button onClick={() => setShowShare(true)}
                 style={{ padding:'7px 14px', borderRadius:8, fontSize:12, fontWeight:600,
                   background:T.greenLo, border:`1px solid ${T.green}44`, color:T.green, cursor:'pointer' }}>🔗 Invite guests</button>
-              <button onClick={() => { toast.success('Room ended!'); handleLeave(); }}
+              <button onClick={handleEndRoom}
                 style={{ padding:'7px 14px', borderRadius:8, fontSize:12, fontWeight:600,
                   background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.2)', color:'#EF4444', cursor:'pointer' }}>🚪 End room</button>
             </div>
@@ -588,35 +622,50 @@ export default function RoomView({ roomId, user, onLeave }) {
                 </div>
               </div>
             ) : (
-              queue.map((t) => (
-                <div key={t.id} className="card-hover" style={{
-                  background: t.playing ? `linear-gradient(135deg,${T.card},rgba(29,185,84,0.07))` : T.card,
-                  borderRadius:14, border:`1px solid ${t.playing ? T.green+'44' : T.border}`,
-                  padding:'12px 14px', display:'flex', alignItems:'center', gap:10, transition:'all .2s',
-                }}>
-                  <ArtistImage name={t.artist} image={t.image} size={40} radius={10}
-                    style={{ border:`1.5px solid ${t.playing ? T.green+'66' : T.border}`, flexShrink:0 }} />
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontWeight:700, fontSize:14, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.title}</div>
-                    <div style={{ color:T.muted, fontSize:12, marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.artist}</div>
+              queue.map((t) => {
+                const uid = user?.uid || 'guest';
+                const voteKey = `vote_${sessionId}_${uid}_${t.id}`;
+                const hasVoted = localStorage.getItem(voteKey);
+                return (
+                  <div key={t.id} className="card-hover" style={{
+                    background: t.playing ? `linear-gradient(135deg,${T.card},rgba(29,185,84,0.07))` : T.card,
+                    borderRadius:14, border:`1px solid ${t.playing ? T.green+'44' : T.border}`,
+                    padding:'12px 14px', display:'flex', alignItems:'center', gap:10, transition:'all .2s',
+                  }}>
+                    <ArtistImage name={t.artist} image={t.image} size={40} radius={10}
+                      style={{ border:`1.5px solid ${t.playing ? T.green+'66' : T.border}`, flexShrink:0 }} />
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontWeight:700, fontSize:14, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.title}</div>
+                      <div style={{ color:T.muted, fontSize:12, marginTop:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.artist}</div>
+                    </div>
+                    <span style={{ fontSize:11, fontWeight:700, color:(t.score||0)>=0?T.green:'#EF4444', flexShrink:0, marginRight:2 }}>
+                      {(t.score||0)>0?'+':''}{(t.score||0).toFixed ? t.score.toFixed(2) : t.score}
+                    </span>
+                    <div style={{ display:'flex', gap:5, flexShrink:0 }}>
+                      <button onClick={() => vote(t.id,'likes')}
+                        disabled={!!hasVoted}
+                        style={{ display:'flex', alignItems:'center',
+                          gap:3, padding:'5px 9px', borderRadius:8,
+                          background: hasVoted === 'like' ? T.green+'33' : T.greenLo,
+                          border:`1px solid ${T.green}33`, color:T.green, fontSize:12, fontWeight:700,
+                          cursor: hasVoted ? 'not-allowed' : 'pointer',
+                          opacity: hasVoted && hasVoted !== 'like' ? 0.4 : 1 }}>
+                        👍 {t.likes}
+                      </button>
+                      <button onClick={() => vote(t.id,'dislikes')}
+                        disabled={!!hasVoted}
+                        style={{ display:'flex', alignItems:'center',
+                          gap:3, padding:'5px 9px', borderRadius:8,
+                          background: hasVoted === 'dislike' ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.1)',
+                          border:'1px solid rgba(239,68,68,0.2)', color:'#EF4444', fontSize:12, fontWeight:700,
+                          cursor: hasVoted ? 'not-allowed' : 'pointer',
+                          opacity: hasVoted && hasVoted !== 'dislike' ? 0.4 : 1 }}>
+                        👎 {t.dislikes}
+                      </button>
+                    </div>
                   </div>
-                  <span style={{ fontSize:11, fontWeight:700, color:(t.score||0)>=0?T.green:'#EF4444', flexShrink:0, marginRight:2 }}>
-                    {(t.score||0)>0?'+':''}{(t.score||0).toFixed ? t.score.toFixed(2) : t.score}
-                  </span>
-                  <div style={{ display:'flex', gap:5, flexShrink:0 }}>
-                    <button onClick={() => vote(t.id,'likes')} style={{ display:'flex', alignItems:'center',
-                      gap:3, padding:'5px 9px', borderRadius:8, background:T.greenLo,
-                      border:`1px solid ${T.green}33`, color:T.green, fontSize:12, fontWeight:700, cursor:'pointer' }}>
-                      👍 {t.likes}
-                    </button>
-                    <button onClick={() => vote(t.id,'dislikes')} style={{ display:'flex', alignItems:'center',
-                      gap:3, padding:'5px 9px', borderRadius:8, background:'rgba(239,68,68,0.1)',
-                      border:'1px solid rgba(239,68,68,0.2)', color:'#EF4444', fontSize:12, fontWeight:700, cursor:'pointer' }}>
-                      👎 {t.dislikes}
-                    </button>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}

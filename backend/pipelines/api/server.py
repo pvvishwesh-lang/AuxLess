@@ -12,6 +12,7 @@ from backend.pipelines.api.bq_sync import sync_session_to_bigquery
 from ml.api.play_event_writer import write_play_event_from_feedback
 from ml.api.monitoring_routes import monitoring_bp
 import time
+from flask_cors import CORS
 
 
 logger = logging.getLogger()
@@ -22,7 +23,9 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 app = Flask(__name__)
+CORS(app)
 app.register_blueprint(monitoring_bp, url_prefix="/monitoring")
+
 
 def _run_session_safe(session_id: str):
     try:

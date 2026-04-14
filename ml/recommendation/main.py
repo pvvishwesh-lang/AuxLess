@@ -23,6 +23,12 @@ GRU activation:
   Song 4:     CBF + CF + GRU (gru_weight=0.20, soft entry)
   Song 5:     CBF + CF + GRU (gru_weight=0.25)
   Song 6+:    CBF + CF + GRU (gru_weight=0.30, full weight)
+
+Monitoring:
+  After each recommendation cycle, write_rec_snapshot() is called via
+  state.monitoring_writer (set by ml_trigger.py after initialize_session).
+  state.last_batch_songs is set on every cycle so ml_trigger.py can run
+  bias evaluation without re-importing anything from this module.
 """
 
 import json
@@ -82,16 +88,31 @@ class SessionState:
     """
     Holds all resources loaded at session start.
     Avoids repeated BigQuery fetches on every recommendation cycle.
+
+    Monitoring attributes (set by ml_trigger.py after initialize_session):
+      catalog_df         — alias for songs_df, used by bias evaluation.
+                           popularity_score is not in BigQuery so the bias
+                           popularity check falls back to final_score as proxy.
+      last_batch_songs   — list[dict] of the last 30 scored recommendations.
+                           Set by recommend_next_song() after every cycle.
+                           Read by _generate_and_write_batch() in ml_trigger.py
+                           to run evaluate_bias() without re-importing main.py.
+      monitoring_writer  — MonitoringWriter instance set by ml_trigger.py.
+                           Optional: if None, monitoring writes are skipped
+                           silently so the pipeline is never blocked.
     """
     def __init__(self):
         self.session_id:       str              = None
         self.db:               firestore.Client = None
         self.bq_client:        object           = None
         self.songs_df:         pd.DataFrame     = None
+        self.catalog_df:       pd.DataFrame     = None   # monitoring alias
         self.embedding_lookup: dict             = {}
         self.gru_model:        object           = None
         self.user_ids:         list             = []
-        self.all_user_liked:   dict             = {}   # full population for CF
+        self.all_user_liked:   dict             = {}     # full population for CF
+        self.last_batch_songs: list             = []     # monitoring: last batch
+        self.monitoring_writer:object           = None   # monitoring: set by trigger
 
 
 # ── Firestore writer ──────────────────────────────────────────────────────────
@@ -193,12 +214,12 @@ def _aggregate_scores(
         # cold start: CBF + CF + session feedback
         total = WEIGHT_CBF_COLD + WEIGHT_CF_COLD
         cbf_w = WEIGHT_CBF_COLD / total
-        cf_w  = WEIGHT_CF_COLD / total
+        cf_w  = WEIGHT_CF_COLD  / total
 
         result["gru_score"]   = 0.0
         result["final_score"] = (
             cbf_w * result["cbf_score"] +
-            cf_w  * result["cf_score"] +
+            cf_w  * result["cf_score"]  +
             SESSION_SCORE_WEIGHT * result["session_score"]
         )
         logger.info(
@@ -217,9 +238,9 @@ def _aggregate_scores(
             lambda vid: gru_lookup.get(vid, 0.0)
         )
         result["final_score"] = (
-            (cbf_weight / total) * result["cbf_score"] +
-            (cf_weight  / total) * result["cf_score"] +
-            (gru_weight / total) * result["gru_score"] +
+            (cbf_weight / total) * result["cbf_score"]  +
+            (cf_weight  / total) * result["cf_score"]   +
+            (gru_weight / total) * result["gru_score"]  +
             SESSION_SCORE_WEIGHT * result["session_score"]
         )
         logger.info(
@@ -241,6 +262,73 @@ def _aggregate_scores(
     return recommendations, gru_weight
 
 
+# ── Monitoring helpers ────────────────────────────────────────────────────────
+def _resolve_phase_name(songs_played: int, gru_active: bool) -> str:
+    """
+    Returns the phase string that matches what the dashboard displays.
+    Mirrors the weight ramp logic in _aggregate_scores.
+    """
+    if not gru_active:
+        return "cold_start"
+    gru_weight = GRU_WEIGHT_RAMP.get(songs_played, WEIGHT_GRU_WARM)
+    if gru_weight == 0.20:
+        return "gru_soft_entry"
+    if gru_weight == 0.25:
+        return "gru_growing"
+    return "full_hybrid"
+
+
+def _resolve_active_weights(
+    songs_played: int,
+    gru_active:   bool,
+    gru_weight:   float,
+) -> dict:
+    """
+    Returns the normalised weights dict used in this cycle.
+    Matches the exact values computed in _aggregate_scores.
+    """
+    if not gru_active or gru_weight == 0.0:
+        total = WEIGHT_CBF_COLD + WEIGHT_CF_COLD
+        return {
+            "cbf": round(WEIGHT_CBF_COLD / total, 4),
+            "cf":  round(WEIGHT_CF_COLD  / total, 4),
+            "gru": 0.0,
+        }
+    total = WEIGHT_CBF_WARM + WEIGHT_CF_WARM + gru_weight
+    return {
+        "cbf": round(WEIGHT_CBF_WARM / total, 4),
+        "cf":  round(WEIGHT_CF_WARM  / total, 4),
+        "gru": round(gru_weight      / total, 4),
+    }
+
+
+def _build_scored_songs(recommendations: pd.DataFrame) -> list[dict]:
+    """
+    Converts the recommendations DataFrame into a list of dicts for monitoring.
+
+    Column mapping:
+      track_title  → title    (dashboard field name)
+      artist_name  → artist   (dashboard field name)
+
+    popularity_score is intentionally omitted — it is not stored in BigQuery
+    (it lives in the GCS preprocessed CSV). evaluate() in model_bias.py
+    handles the missing column gracefully by using final_score as a proxy.
+    """
+    scored = []
+    for _, row in recommendations.iterrows():
+        scored.append({
+            "video_id":        str(row.get("video_id",     "")),
+            "title":           str(row.get("track_title",  "")),
+            "artist":          str(row.get("artist_name",  "")),
+            "genre":           str(row.get("genre",        "")),
+            "cbf_score":       round(float(row.get("cbf_score",  0.0)), 4),
+            "cf_score":        round(float(row.get("cf_score",   0.0)), 4),
+            "gru_score":       round(float(row.get("gru_score",  0.0)), 4),
+            "final_score":     round(float(row.get("final_score",0.0)), 4),
+        })
+    return scored
+
+
 # ── Session initialization ────────────────────────────────────────────────────
 def initialize_session(session_id: str) -> SessionState:
     """
@@ -256,6 +344,7 @@ def initialize_session(session_id: str) -> SessionState:
 
     logger.info("Fetching song catalog from BigQuery...")
     state.songs_df         = fetch_all_embeddings(state.bq_client)
+    state.catalog_df       = state.songs_df          # monitoring alias
     state.embedding_lookup = build_embedding_lookup(state.songs_df)
     logger.info(f"Loaded {len(state.songs_df)} songs from BigQuery")
 
@@ -302,6 +391,10 @@ def recommend_next_song(state: SessionState) -> dict:
     Reads latest session state from Firestore + BigQuery,
     runs CBF + CF + GRU (if active), aggregates with graduated
     GRU weight ramp, writes top N to Firestore.
+
+    Monitoring side effects (non-critical, never raise):
+      - Sets state.last_batch_songs  → read by ml_trigger.py for bias eval
+      - Calls state.monitoring_writer.write_rec_snapshot() if writer exists
     """
     session_id = state.session_id
     db         = state.db
@@ -388,7 +481,33 @@ def recommend_next_song(state: SessionState) -> dict:
         logger.error("No recommendations generated.")
         return {}
 
-    # write to Firestore
+    # ── Monitoring ────────────────────────────────────────────────────────────
+    # Runs after aggregation, before Firestore write.
+    # Failures here are non-critical and must never block the pipeline.
+    try:
+        scored_songs = _build_scored_songs(recommendations)
+
+        # always update last_batch_songs so ml_trigger.py can run bias eval
+        state.last_batch_songs = scored_songs
+
+        # write rec snapshot if monitoring_writer is wired up
+        if state.monitoring_writer is not None:
+            phase   = _resolve_phase_name(songs_played, gru_active)
+            weights = _resolve_active_weights(songs_played, gru_active, gru_weight)
+            state.monitoring_writer.write_rec_snapshot(
+                phase=phase,
+                weights=weights,
+                scored_songs=scored_songs,
+            )
+            logger.debug(
+                "Rec snapshot written — phase: %s, weights: %s, songs: %d",
+                phase, weights, len(scored_songs),
+            )
+    except Exception as exc:
+        logger.error("Monitoring write failed (non-critical): %s", exc)
+    # ── End monitoring ────────────────────────────────────────────────────────
+
+    # write to Firestore for frontend
     _write_recommendations_to_firestore(
         db=db,
         session_id=session_id,

@@ -9,6 +9,7 @@ from backend.pipelines.run_all_users import run_for_session
 from backend.pipelines.api.pubsub_publisher import publish_feedback_event
 from backend.pipelines.api.firestore_client import FirestoreClient
 from backend.pipelines.api.bq_sync import sync_session_to_bigquery
+from ml.api.monitoring_routes import monitoring_bp
 import time
 
 
@@ -20,6 +21,7 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 app = Flask(__name__)
+app.register_blueprint(monitoring_bp, url_prefix="/monitoring")
 
 def _run_session_safe(session_id: str):
     try:

@@ -3,37 +3,40 @@ import {
   collection, onSnapshot,
   query, orderBy
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { mlDb } from '../config/firebase';
 
-// Listens to sessions/{roomId}/queue
-// ML model reorders this after each feedback window
+const toSessionId = (id) => (id || '').replace(/^AUX-/i, '').toLowerCase();
+
 export function useQueue(roomId) {
   const [queue,   setQueue]   = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!roomId) return;
+    const sessionId = toSessionId(roomId);
 
-    // order by score desc — matches ScoreFeedbackFn output
+    // Read from recommendations — where ML writes
     const q = query(
-      collection(db, 'sessions', roomId, 'queue'),
-      orderBy('score', 'desc')
+      collection(mlDb, 'sessions', sessionId, 'recommendations'),
+      orderBy('rank', 'asc')
     );
 
     const unsub = onSnapshot(q, (snap) => {
       const tracks = snap.docs.map(d => ({
-        id:        d.id,
+        id:       d.id,
         ...d.data(),
-        // map pipeline field names → UI field names
-        title:     d.data().song_name  || d.data().title,
-        artist:    d.data().artist_name|| d.data().artist,
-        likes:     d.data().like_count || 0,
-        dislikes:  d.data().dislike_count || 0,
-        score:     d.data().score      || 0,
+        title:    d.data().track_title  || d.data().song_name  || d.data().title  || 'Unknown',
+        artist:   d.data().artist_name  || d.data().artist     || '',
+        likes:    d.data().like_count   || 0,
+        dislikes: d.data().dislike_count || 0,
+        score:    d.data().final_score  || d.data().score      || 0,
+        video_id: d.data().video_id     || d.id,
+        genre:    d.data().genre        || '',
+        image:    d.data().artwork_url  || d.data().image_url  || null,
       }));
       setQueue(tracks);
       setLoading(false);
-    });
+    }, () => setLoading(false));
 
     return () => unsub();
   }, [roomId]);

@@ -40,6 +40,7 @@ def fetch_all_embeddings(client: bigquery.Client) -> pd.DataFrame:
             track_title,
             artist_name,
             genre,
+            popularity_score,
             embedding
         FROM `{TABLE_REF}`
     """
@@ -47,6 +48,10 @@ def fetch_all_embeddings(client: bigquery.Client) -> pd.DataFrame:
     if hasattr(result, 'to_dataframe'):
         df = result.to_dataframe(dtypes={"embedding": object})
         df["embedding"] = df["embedding"].apply(lambda x: np.array(x, dtype=np.float32))
+        if "popularity_score" not in df.columns:
+            df["popularity_score"] = 0.0
+        else:
+            df["popularity_score"] = df["popularity_score"].fillna(0.0).astype(float)
     else:
         rows = []
         for row in result:
@@ -55,6 +60,7 @@ def fetch_all_embeddings(client: bigquery.Client) -> pd.DataFrame:
                 "track_title": row.track_title,
                 "artist_name": row.artist_name,
                 "genre":       row.genre,
+                "popularity_score": float(row.popularity_score) if row.popularity_score else 0.0,
                 "embedding":   np.array(row.embedding, dtype=np.float32),
             })
         df = pd.DataFrame(rows)

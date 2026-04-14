@@ -9,6 +9,7 @@ from backend.pipelines.run_all_users import run_for_session
 from backend.pipelines.api.pubsub_publisher import publish_feedback_event
 from backend.pipelines.api.firestore_client import FirestoreClient
 from backend.pipelines.api.bq_sync import sync_session_to_bigquery
+from ml.api.play_event_writer import write_play_event_from_feedback
 from ml.api.monitoring_routes import monitoring_bp
 import time
 
@@ -180,6 +181,16 @@ def feedback():
         return "Invalid action", 400
     try:
         publish_feedback_event(data)
+
+        threading.Thread(
+        target=write_play_event_from_feedback,
+        args=(
+            data["session_id"],
+            data["video_id"],
+            data["action"],
+            float(data.get("play_duration_sec", 0.0)),
+        ),
+        daemon=True,).start()
         return jsonify({"status": "ok"}), 200
     except Exception as e:
         logging.getLogger(__name__).error(f"Failed to publish feedback: {e}")

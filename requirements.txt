@@ -6,6 +6,7 @@ google-api-python-client
 google-cloud-storage
 google-cloud-firestore
 google-cloud-bigquery
+db-dtypes
 google-cloud-pubsub
 requests
 pandas

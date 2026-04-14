@@ -12,11 +12,10 @@ export default function TabCreate({ user, onEnterRoom }) {
   const [done,     setDone]     = useState(false);
   const [roomCode, setRoomCode] = useState('');
 
-  // SHA256 hash helper — Vishwesh's naming convention requirement
   const sha256Short = async (str) => {
-    const buf  = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-    const hex  = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
-    return hex.slice(0, 8).toUpperCase(); // first 8 chars of SHA256
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    return hex.slice(0, 4).toUpperCase();
   };
 
   const create = async () => {
@@ -25,10 +24,10 @@ export default function TabCreate({ user, onEnterRoom }) {
     try {
       const raw     = `${user?.uid || 'guest'}-${Date.now()}`;
       const hash    = await sha256Short(raw);
-      const code    = 'AUX-' + hash;      // room code shown to users
-      const session = hash.toLowerCase(); // session_id for pipeline (no AUX- prefix, lowercase)
+      const code    = 'AUX-' + hash;
+      const session = hash.toLowerCase();
 
-      // 1. Create room doc → YOUR Firestore (db)
+      // 1. YOUR Firestore — await this
       await setDoc(doc(db, 'rooms', code), {
         code,
         name:       name.trim(),
@@ -52,12 +51,12 @@ export default function TabCreate({ user, onEnterRoom }) {
         }],
       });
 
-      // 2. Create session doc → NIKHIL'S Firestore (mlDb)
-      await setDoc(doc(mlDb, 'sessions', session), {
-        session_id: session,
-        room_code:  code,
-        status:     'pending',
-        createdAt:  Date.now(),
+      // 2. ML Firestore — NO await, background
+      setDoc(doc(mlDb, 'sessions', session), {
+        session_id:    session,
+        room_code:     code,
+        status:        'pending',
+        createdAt:     Date.now(),
         users: [{
           user_id:       user?.uid  || 'guest',
           isactive:      true,
@@ -66,16 +65,16 @@ export default function TabCreate({ user, onEnterRoom }) {
           genres:        user?.genres  || [],
           artists:       user?.artists || [],
         }],
-      });
+      }).catch(e => console.warn('mlDb session failed:', e));
 
-      // 3. Create metadata/state → NIKHIL'S Firestore (mlDb)
-      await setDoc(doc(mlDb, 'sessions', session, 'metadata', 'state'), {
+      // 3. ML metadata — NO await, background
+      setDoc(doc(mlDb, 'sessions', session, 'metadata', 'state'), {
         songs_played_count: 0,
         session_number:     1,
         current_session_id: session,
         status:             'active',
         createdAt:          Date.now(),
-      });
+      }).catch(e => console.warn('mlDb metadata failed:', e));
 
       setRoomCode(code);
       setDone(true);
@@ -103,7 +102,6 @@ export default function TabCreate({ user, onEnterRoom }) {
           onClick={() => { navigator.clipboard?.writeText(roomCode); toast.success('Code copied!'); }}
           style={{ padding: '8px 20px', borderRadius: 8, marginBottom: 20, background: T.greenLo, border: `1px solid ${T.green}44`, color: T.green, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
         >📋 Copy code</button>
-
         {(user?.genres?.length > 0 || user?.artists?.length > 0) && (
           <div style={{ background: T.purpleLo, borderRadius: 12, padding: '14px 16px', border: `1px solid ${T.purple}33`, marginBottom: 20, textAlign: 'left' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: T.purple, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10 }}>🧠 Your taste seeds the ML</div>
@@ -117,9 +115,7 @@ export default function TabCreate({ user, onEnterRoom }) {
             {user?.artists?.length > 0 && (
               <div style={{ fontSize: 12, color: T.muted }}>Artists: <b style={{ color: T.text }}>{user.artists.slice(0, 3).join(', ')}</b></div>
             )}
-            <div style={{ fontSize: 11, color: T.muted, marginTop: 8 }}>
-              Pipeline triggered! Fetching playlists + running ML… 🚀
-            </div>
+            <div style={{ fontSize: 11, color: T.muted, marginTop: 8 }}>Pipeline triggered! Fetching playlists + running ML… 🚀</div>
           </div>
         )}
         <Btn onClick={() => onEnterRoom(roomCode)} full icon="🎵">Enter room →</Btn>

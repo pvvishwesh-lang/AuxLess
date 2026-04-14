@@ -142,7 +142,7 @@ export default function TabJoin({ user, onEnterRoom }) {
         <span style={{ fontSize: 20 }}>💡</span>
         <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6 }}>
           Ask the room host for their code — it looks like{' '}
-          <b style={{ color: T.green, fontFamily: 'monospace' }}>AUX-XXXXXXXX</b>
+          <b style={{ color: T.green, fontFamily: 'monospace' }}>AUX-XXXX</b>
         </p>
       </div>
     </div>

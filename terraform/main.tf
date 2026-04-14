@@ -441,6 +441,7 @@ resource "google_cloudfunctions2_function" "firestore_trigger" {
     event_type = "google.cloud.firestore.document.v1.updated"
     retry_policy            = "RETRY_POLICY_DO_NOT_RETRY"
     service_account_email   = "${local.project_number}-compute@developer.gserviceaccount.com"
+    event_data_content_type = "application/protobuf"
 
     event_filters {
       attribute = "database"

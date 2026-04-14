@@ -10,12 +10,6 @@ const FEATURES = [
   { icon: '👍', title: 'Feedback loop',     body: 'Likes and skips instantly retrain the recommendation weights.',          color: '#F59E0B' },
 ];
 
-const PIPELINE = [
-  'YouTube API','→','Apache Beam','→','Dataflow','→',
-  'GCS + BQ','→','ML Cluster','→','Firestore','→','Your room 🎶'
-];
-
-// ── Animated music visualizer bars ────────────────────────────
 function MusicViz() {
   const bars = [3,7,5,9,6,4,8,5,7,3,6,9,4,7,5,8,3,6,9,5,7,4,8,6];
   return (
@@ -25,8 +19,7 @@ function MusicViz() {
       `}</style>
       {bars.map((h,i) => (
         <div key={i} style={{
-          width: 4, height: h * 5,
-          borderRadius: 3,
+          width: 4, height: h * 5, borderRadius: 3,
           background: i % 3 === 0 ? T.green : i % 3 === 1 ? T.purple : T.pink,
           transformOrigin: 'bottom',
           animation: `vbar ${0.6 + i * 0.08}s ease-in-out ${i * 0.05}s infinite`,
@@ -37,41 +30,6 @@ function MusicViz() {
   );
 }
 
-// ── Floating genre pills that move around ─────────────────────
-function FloatingGenres() {
-  const genres = [
-    { label:'Hip-Hop', color:'#1DB954', x:5,  y:20, delay:0    },
-    { label:'Pop',     color:'#7C3AED', x:75, y:15, delay:0.5  },
-    { label:'R&B',     color:'#EC4899', x:15, y:70, delay:1    },
-    { label:'House',   color:'#3B82F6', x:80, y:65, delay:1.5  },
-    { label:'Latin',   color:'#F59E0B', x:45, y:85, delay:0.8  },
-    { label:'Drill',   color:'#EF4444', x:60, y:10, delay:1.2  },
-    { label:'K-Pop',   color:'#F472B6', x:30, y:40, delay:0.3  },
-    { label:'Afrobeats',color:'#10B981',x:70, y:45, delay:1.8  },
-  ];
-  return (
-    <div style={{ position:'absolute', inset:0, overflow:'hidden', pointerEvents:'none' }}>
-      <style>{`
-        @keyframes float0{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-12px) rotate(2deg)}}
-        @keyframes float1{0%,100%{transform:translateY(0) rotate(1deg)}50%{transform:translateY(-16px) rotate(-1deg)}}
-        @keyframes float2{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-10px) rotate(3deg)}}
-        @keyframes float3{0%,100%{transform:translateY(0) rotate(2deg)}50%{transform:translateY(-14px) rotate(-2deg)}}
-      `}</style>
-      {genres.map((g,i) => (
-        <div key={g.label} style={{
-          position:'absolute', left:`${g.x}%`, top:`${g.y}%`,
-          padding:'6px 14px', borderRadius:999,
-          background:`${g.color}18`, border:`1px solid ${g.color}44`,
-          fontSize:12, fontWeight:700, color:g.color,
-          animation:`float${i%4} ${2.5 + i*0.3}s ease-in-out ${g.delay}s infinite`,
-          whiteSpace:'nowrap',
-        }}>{g.label}</div>
-      ))}
-    </div>
-  );
-}
-
-// ── Social proof numbers ───────────────────────────────────────
 function StatPill({ n, label }) {
   return (
     <div style={{ textAlign:'center' }}>
@@ -84,7 +42,6 @@ function StatPill({ n, label }) {
 export default function TabHome({ onLogin, onTab }) {
   const [activeFeature, setActiveFeature] = useState(0);
 
-  // auto rotate features
   useEffect(() => {
     const id = setInterval(() => setActiveFeature(p => (p+1) % FEATURES.length), 3000);
     return () => clearInterval(id);
@@ -94,11 +51,7 @@ export default function TabHome({ onLogin, onTab }) {
     <div className="fade-up" style={{ fontFamily:'system-ui,sans-serif', color:T.text }}>
       <Blobs />
 
-      {/* ── HERO ── */}
       <div style={{ maxWidth:680, margin:'0 auto', padding:'64px 24px 0', textAlign:'center', position:'relative', zIndex:1 }}>
-
-        
-
         <div style={{ position:'relative', zIndex:1 }}>
           <div style={{
             display:'inline-flex', alignItems:'center', gap:8, padding:'5px 14px',
@@ -121,13 +74,12 @@ export default function TabHome({ onLogin, onTab }) {
             {' '}at the party
           </h1>
 
-          {/* animated music visualizer */}
           <div style={{ marginBottom:20 }}>
             <MusicViz />
           </div>
 
           <p style={{ fontSize:16, color:T.muted, lineHeight:1.78, marginBottom:36, maxWidth:440, marginLeft:'auto', marginRight:'auto' }}>
-            AuxLess syncs every guest's YouTube playlists, clusters your collective taste with ML, and plays exactly what the room wants - live.
+            AuxLess syncs every guest's YouTube playlists, clusters your collective taste with ML, and plays exactly what the room wants — live.
           </p>
 
           <div style={{ display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap', marginBottom:48 }}>
@@ -139,7 +91,6 @@ export default function TabHome({ onLogin, onTab }) {
             </Btn>
           </div>
 
-          {/* stats */}
           <div style={{
             display:'flex', gap:32, justifyContent:'center',
             padding:'20px 0', marginBottom:48,
@@ -153,7 +104,6 @@ export default function TabHome({ onLogin, onTab }) {
         </div>
       </div>
 
-      {/* ── FEATURES — interactive rotating cards ── */}
       <div style={{ maxWidth:880, margin:'0 auto', padding:'0 24px', position:'relative', zIndex:1 }}>
         <div style={{ textAlign:'center', marginBottom:24 }}>
           <h2 style={{ fontSize:22, fontWeight:800, letterSpacing:'-0.5px', color:T.text, marginBottom:8 }}>
@@ -162,7 +112,6 @@ export default function TabHome({ onLogin, onTab }) {
           <p style={{ fontSize:14, color:T.muted }}>Every feature talks to the pipeline in real-time</p>
         </div>
 
-        {/* feature tabs */}
         <div style={{ display:'flex', gap:8, justifyContent:'center', marginBottom:20, flexWrap:'wrap' }}>
           {FEATURES.map((f,i) => (
             <button key={f.title} onClick={() => setActiveFeature(i)} style={{
@@ -177,7 +126,6 @@ export default function TabHome({ onLogin, onTab }) {
           ))}
         </div>
 
-        {/* active feature detail */}
         <div style={{
           background:T.card, borderRadius:18, border:`1px solid ${FEATURES[activeFeature].color}33`,
           padding:'28px 28px', marginBottom:20, transition:'all .3s',
@@ -194,7 +142,6 @@ export default function TabHome({ onLogin, onTab }) {
           </div>
         </div>
 
-        {/* dots */}
         <div style={{ display:'flex', gap:6, justifyContent:'center', marginBottom:48 }}>
           {FEATURES.map((_,i) => (
             <div key={i} onClick={() => setActiveFeature(i)} style={{
@@ -206,16 +153,11 @@ export default function TabHome({ onLogin, onTab }) {
         </div>
       </div>
 
-    
-
-      {/* ── FOOTER ── */}
       <footer style={{
         maxWidth:880, margin:'48px auto 0', padding:'32px 24px 24px',
         borderTop:`1px solid ${T.border}`, position:'relative', zIndex:1,
       }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:24, marginBottom:28 }}>
-
-          {/* brand */}
           <div style={{ maxWidth:220 }}>
             <div style={{ display:'flex', alignItems:'center', gap:9, marginBottom:10 }}>
               <div style={{ width:28, height:28, borderRadius:8, background:`linear-gradient(135deg,${T.green},${T.purple})`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>♫</div>
@@ -225,8 +167,6 @@ export default function TabHome({ onLogin, onTab }) {
               Party music recommendation system. ML-powered, real-time, built for the room.
             </p>
           </div>
-
-          {/* links */}
           <div style={{ display:'flex', gap:48, flexWrap:'wrap' }}>
             <div>
               <div style={{ fontSize:11, fontWeight:700, color:T.muted, textTransform:'uppercase', letterSpacing:'.1em', marginBottom:12 }}>Product</div>
@@ -254,8 +194,6 @@ export default function TabHome({ onLogin, onTab }) {
             </div>
           </div>
         </div>
-
-        {/* bottom bar */}
         <div style={{
           display:'flex', justifyContent:'space-between', alignItems:'center',
           paddingTop:20, borderTop:`1px solid ${T.border}`, flexWrap:'wrap', gap:12,

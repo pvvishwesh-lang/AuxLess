@@ -25,7 +25,9 @@ GRU activation:
   Song 6+:    CBF + CF + GRU (gru_weight=0.30, full weight)
 """
 
+import json
 import logging
+import os
 
 import numpy as np
 import pandas as pd
@@ -264,6 +266,21 @@ def initialize_session(session_id: str) -> SessionState:
             f"GRU model could not be loaded: {e}. Using CBF + CF only."
         )
         state.gru_model = None
+        try:
+            from google.cloud import pubsub_v1
+            alert_topic = os.environ.get("ALERT_TOPIC", "auxless-alerts")
+            publisher = pubsub_v1.PublisherClient()
+            topic_path = publisher.topic_path(PROJECT_ID, alert_topic)
+            alert_payload = json.dumps({
+                "session_id": session_id,
+                "error": str(e),
+                "message": f"GRU model failed to load for session {session_id}. Falling back to CBF+CF only.",
+                "severity": "WARNING"
+            }).encode("utf-8")
+            publisher.publish(topic_path, alert_payload)
+            logger.info(f"GRU fallback alert published for session {session_id}")
+        except Exception as alert_err:
+            logger.error(f"Failed to publish GRU fallback alert: {alert_err}")
 
     state.user_ids = get_session_user_ids(state.db, session_id)
     logger.info(f"Session users: {state.user_ids}")

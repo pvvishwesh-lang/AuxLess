@@ -233,11 +233,11 @@
 
   <div class="grid-2">
     <div class="card">
-      <div class="card-title">Latest recommendation cycle</div>
-      <div class="tabs">
-        <button class="tab active" onclick="showTab('rec',0,this)">Cycle 1</button>
-        <button class="tab" onclick="showTab('rec',1,this)">Cycle 2</button>
-        <button class="tab" onclick="showTab('rec',2,this)">Cycle 3</button>
+      <div class="card-title">Recommendation cycles (chronological)</div>
+      <div class="tabs" id="recTabs">
+        <button class="tab active" onclick="showRecTab(0,this)">Cycle 1</button>
+        <button class="tab" onclick="showRecTab(1,this)">Cycle 2</button>
+        <button class="tab" onclick="showRecTab(2,this)">Cycle 3</button>
       </div>
       <div id="recCycle0" class="tab-panel active"><div style="color:var(--hint);font-size:13px;">Loading...</div></div>
       <div id="recCycle1" class="tab-panel"></div>
@@ -245,7 +245,7 @@
     </div>
 
     <div class="card">
-      <div class="card-title">Score breakdown — current cycle</div>
+      <div class="card-title">Score breakdown — <span id="chartCycleLabel">Cycle 1</span></div>
       <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
         <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);"><span style="width:8px;height:8px;border-radius:2px;background:#5DCAA5;display:inline-block"></span>CBF — content similarity</span>
         <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);"><span style="width:8px;height:8px;border-radius:2px;background:#7F77DD;display:inline-block"></span>CF — co-occurrence</span>
@@ -438,22 +438,98 @@ async function updateState() {
 
 // ── RECOMMENDATIONS ───────────────────────────────────────────
 
+// Store cycles globally so tab switches can redraw the chart
+let _recCycles = [];
+let _activeRecTab = 0;
+
+function showRecTab(idx, btn) {
+  // Switch tab panel
+  document.querySelectorAll('[id^="recCycle"]').forEach((el,i) => {
+    el.classList.toggle('active', i === idx);
+  });
+  btn.closest('.tabs').querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', i === idx));
+  _activeRecTab = idx;
+  // Redraw chart for selected cycle
+  _drawScoreChart(idx);
+  document.getElementById('chartCycleLabel').textContent = 'Cycle ' + (idx + 1);
+}
+
+function _drawScoreChart(idx) {
+  if (!_recCycles[idx]) return;
+  const songs = (_recCycles[idx].songs ?? []).slice(0, 8);
+  if (!songs.length) return;
+  const labels = songs.map(s => s.title?.length > 14 ? s.title.slice(0,13)+'…' : s.title);
+  const cbf = songs.map(s => +(s.cbf_score ?? 0).toFixed(3));
+  const cf  = songs.map(s => +(s.cf_score  ?? 0).toFixed(3));
+  const gru = songs.map(s => +(s.gru_score ?? 0).toFixed(3));
+
+  if (scoreChartInst) scoreChartInst.destroy();
+  const ctx = document.getElementById('scoreChart').getContext('2d');
+  scoreChartInst = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'CBF', data: cbf, backgroundColor: '#5DCAA5', borderRadius: 3 },
+        { label: 'CF',  data: cf,  backgroundColor: '#7F77DD', borderRadius: 3 },
+        { label: 'GRU', data: gru, backgroundColor: '#F0997B', borderRadius: 3 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { stacked: true, ticks: { font: { size: 10 }, color: '#9d9d98' }, grid: { display: false } },
+        y: { stacked: true, ticks: { font: { size: 10 }, color: '#9d9d98' }, grid: { color: 'rgba(0,0,0,0.06)' } }
+      }
+    }
+  });
+}
+
 async function updateRecs() {
   const cycles = await fetchJSON(BASE + '/recommendations?cycles=3');
-  const list = cycles.cycles ?? [];
+  const rawList = cycles.cycles ?? [];
+
+  // API returns DESC (newest first) — reverse to chronological so Cycle 1 = first batch
+  const list = [...rawList].reverse();
+  _recCycles = list;
+
+  // Update tab labels with phase info
+  const tabBtns = document.querySelectorAll('#recTabs .tab');
+  list.forEach((cycle, ci) => {
+    if (tabBtns[ci]) {
+      const phase = (cycle.phase ?? 'unknown').replace(/_/g,' ');
+      tabBtns[ci].textContent = 'Cycle ' + (ci+1) + ' · ' + phase;
+    }
+  });
+  // Hide unused tabs
+  for (let i = list.length; i < tabBtns.length; i++) {
+    tabBtns[i].style.display = 'none';
+  }
 
   list.forEach((cycle, ci) => {
     const panel = document.getElementById('recCycle' + ci);
     if (!panel) return;
     const songs = cycle.songs ?? [];
-    panel.innerHTML = songs.slice(0,10).map(s => {
+
+    // Per-cycle weight header
+    const w = cycle.weights ?? {};
+    const phaseStr = (cycle.phase ?? 'unknown').replace(/_/g,' ');
+    const weightHeader = `<div style="margin-bottom:10px;padding:8px 10px;background:var(--surface2);border-radius:var(--r-md);display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <span class="pill pill-purple" style="font-size:10px;">${phaseStr}</span>
+      <span style="font-size:11px;color:var(--muted);">CBF <b>${w.cbf != null ? Math.round(w.cbf*100)+'%' : '—'}</b></span>
+      <span style="font-size:11px;color:var(--muted);">CF <b>${w.cf != null ? Math.round(w.cf*100)+'%' : '—'}</b></span>
+      <span style="font-size:11px;color:var(--muted);">GRU <b>${w.gru != null ? Math.round(w.gru*100)+'%' : '—'}</b></span>
+    </div>`;
+
+    panel.innerHTML = weightHeader + songs.slice(0,10).map(s => {
       const mx = Math.max(...songs.map(x=>x.final_score), 0.001);
       const cbfW = ((s.cbf_score/mx)*120).toFixed(0);
       const cfW  = ((s.cf_score/mx)*120).toFixed(0);
       const gruW = ((s.gru_score/mx)*120).toFixed(0);
       return `<div class="rec-song">
         <div class="rec-song-header">
-          <span class="rec-rank">${s.rank}</span>
+          <span class="rec-rank">${s.rank ?? '—'}</span>
           <span class="rec-title">${s.title ?? '—'}</span>
           <span class="rec-final">${fmtScore(s.final_score)}</span>
         </div>
@@ -465,35 +541,9 @@ async function updateRecs() {
     }).join('');
   });
 
-  // Score breakdown stacked bar chart — latest cycle
+  // Draw chart for currently active tab
   if (list.length > 0) {
-    const songs = (list[0].songs ?? []).slice(0, 8);
-    const labels = songs.map(s => s.title?.length > 14 ? s.title.slice(0,13)+'…' : s.title);
-    const cbf = songs.map(s => +(s.cbf_score ?? 0).toFixed(3));
-    const cf  = songs.map(s => +(s.cf_score  ?? 0).toFixed(3));
-    const gru = songs.map(s => +(s.gru_score ?? 0).toFixed(3));
-
-    if (scoreChartInst) scoreChartInst.destroy();
-    const ctx = document.getElementById('scoreChart').getContext('2d');
-    scoreChartInst = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [
-          { label: 'CBF', data: cbf, backgroundColor: '#5DCAA5', borderRadius: 3 },
-          { label: 'CF',  data: cf,  backgroundColor: '#7F77DD', borderRadius: 3 },
-          { label: 'GRU', data: gru, backgroundColor: '#F0997B', borderRadius: 3 },
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { stacked: true, ticks: { font: { size: 10 }, color: '#9d9d98' }, grid: { display: false } },
-          y: { stacked: true, ticks: { font: { size: 10 }, color: '#9d9d98' }, grid: { color: 'rgba(0,0,0,0.06)' } }
-        }
-      }
-    });
+    _drawScoreChart(_activeRecTab);
   }
 }
 

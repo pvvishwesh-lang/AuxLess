@@ -233,6 +233,30 @@ def _run_ml_session(session_id: str):
         # loads BigQuery catalog, GRU model, session users
         state = initialize_session(session_id)
 
+        # ── Load session songs for CF seeding ─────────────────────────────
+        # The preprocessed CSV contains songs from ALL users' YouTube
+        # playlists (processed by the batch pipeline). These are the
+        # session's taste profile. BigQuery's users table is empty for
+        # first-time users (only populated on /end_session), so we use
+        # these as CF seeds and CBF preference input.
+        try:
+            from ml.preprocessing.preprocess_songs import (
+                _read_csv_from_gcs,
+                _preprocessed_path,
+            )
+            csv_path   = _preprocessed_path(session_id)
+            session_df = _read_csv_from_gcs(bucket, csv_path)
+            state.session_song_ids = set(
+                session_df["video_id"].dropna().unique()
+            )
+            logger.info(
+                "Loaded %d session song IDs from preprocessed CSV for CF seeding",
+                len(state.session_song_ids),
+            )
+        except Exception as exc:
+            logger.warning("Could not load session songs for CF: %s", exc)
+            state.session_song_ids = set()
+
         # ── Initialise MonitoringWriter once per session ──────────────────
         # state.db is the Firestore client set up by initialize_session().
         # One writer instance is shared across all batches for this session.

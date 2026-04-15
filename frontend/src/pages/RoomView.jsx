@@ -177,6 +177,18 @@ export default function RoomView({ roomId, user, onLeave }) {
     if (roomId) sessionStorage.setItem('auxless_room', roomId);
   }, [roomId]);
 
+  // ── Helper: call Cloud Run end_session ────────────────────
+  const callEndSession = (sid) => {
+    const url = process.env.REACT_APP_CLOUD_FUNCTION_URL;
+    if (url && sid) {
+      fetch(`${url}/end_session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sid }),
+      }).catch(() => {});
+    }
+  };
+
   // ── Restore cached queue on mount ────────────────────────
   useEffect(() => {
     try {
@@ -195,14 +207,12 @@ export default function RoomView({ roomId, user, onLeave }) {
   const handleSongStart = useCallback(async (song, order) => {
     if (!song) return;
 
-    // Save to played list
     const played = JSON.parse(localStorage.getItem(playedKey) || '[]');
     if (!played.includes(song.id)) {
       played.push(song.id);
       localStorage.setItem(playedKey, JSON.stringify(played));
     }
 
-    // Remove from queue cache
     try {
       const cached  = JSON.parse(localStorage.getItem(queueCacheKey) || '[]');
       const updated = cached.filter(s => s.id !== song.id);
@@ -255,14 +265,12 @@ export default function RoomView({ roomId, user, onLeave }) {
     }
     const playing = current.find(t => t.playing) || current[0];
 
-    // Save to played list
     const played = JSON.parse(localStorage.getItem(playedKey) || '[]');
     if (!played.includes(playing.id)) {
       played.push(playing.id);
       localStorage.setItem(playedKey, JSON.stringify(played));
     }
 
-    // Remove from queue cache
     try {
       const cached  = JSON.parse(localStorage.getItem(queueCacheKey) || '[]');
       const updated = cached.filter(s => s.id !== playing.id);
@@ -300,7 +308,6 @@ export default function RoomView({ roomId, user, onLeave }) {
       (snap) => {
         const played = JSON.parse(localStorage.getItem(playedKey) || '[]');
 
-        // Firestore deleted old batch — keep showing cached queue!
         if (snap.empty) {
           console.log('[Queue] Firestore empty — keeping cached queue intact');
           return;
@@ -309,7 +316,6 @@ export default function RoomView({ roomId, user, onLeave }) {
         const allDocs = snap.docs.map(d => d.id);
         const allNew  = allDocs.every(id => !played.includes(id));
 
-        // New batch of 30 arrived!
         if (allNew && allDocs.length > 5 && played.length > 0) {
           console.log('[Queue] New batch detected! Clearing cache for fresh start');
           localStorage.removeItem(playedKey);
@@ -318,15 +324,12 @@ export default function RoomView({ roomId, user, onLeave }) {
           setIsLive(false);
         }
 
-        // Re-read played after potential reset
         const playedNow = JSON.parse(localStorage.getItem(playedKey) || '[]');
 
-        // Get cached queue (songs Firestore may have already deleted)
         const cachedNow = (() => {
           try { return JSON.parse(localStorage.getItem(queueCacheKey) || '[]'); } catch { return []; }
         })();
 
-        // Map Firestore songs
         const firestoreSongs = snap.docs.map((d) => {
           const existing = queueRef.current.find(q => q.id === d.id)
                         || cachedNow.find(q => q.id === d.id);
@@ -344,13 +347,11 @@ export default function RoomView({ roomId, user, onLeave }) {
           };
         });
 
-        // Keep cached songs that Firestore deleted but haven't been played yet
         const firestoreIds   = new Set(firestoreSongs.map(s => s.id));
         const survivingSongs = cachedNow.filter(
           s => !firestoreIds.has(s.id) && !playedNow.includes(s.id)
         );
 
-        // Merge: Firestore + surviving cached, remove played
         const allSongs = [...firestoreSongs, ...survivingSongs]
           .filter(s => !playedNow.includes(s.id));
 
@@ -358,7 +359,6 @@ export default function RoomView({ roomId, user, onLeave }) {
 
         allSongs.sort((a, b) => b.score - a.score);
 
-        // Preserve currently playing song at top
         const currentPlaying = queueRef.current.find(t => t.playing);
         if (currentPlaying) {
           const idx = allSongs.findIndex(r => r.id === currentPlaying.id);
@@ -373,7 +373,6 @@ export default function RoomView({ roomId, user, onLeave }) {
           allSongs[0].playing = true;
         }
 
-        // Save merged queue to localStorage cache
         localStorage.setItem(queueCacheKey, JSON.stringify(allSongs));
 
         setQueue(allSongs);
@@ -543,6 +542,9 @@ export default function RoomView({ roomId, user, onLeave }) {
   const handleEndRoom = async () => {
     if (!isHost) return;
     try {
+      // Call Cloud Run end_session
+      callEndSession(sessionId);
+
       await updateDoc(doc(mlDb, 'sessions', sessionId), {
         status: 'ended', ended_at: serverTimestamp(),
       }).catch(() => {});
@@ -565,6 +567,9 @@ export default function RoomView({ roomId, user, onLeave }) {
         const snap = await getDoc(doc(db, 'rooms', roomId));
         if (snap.exists()) {
           if (isHost) {
+            // Call Cloud Run end_session when host leaves
+            callEndSession(sessionId);
+
             await updateDoc(doc(db, 'rooms', roomId), {
               status: 'ended', ended_at: serverTimestamp(),
             });

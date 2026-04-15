@@ -239,6 +239,12 @@ def _run_ml_session(session_id: str):
         # session's taste profile. BigQuery's users table is empty for
         # first-time users (only populated on /end_session), so we use
         # these as CF seeds and CBF preference input.
+        #
+        # CRITICAL: filter against the catalog (songs_df) so only IDs that
+        # exist in BigQuery enter the pipeline. Unmatched IDs cause:
+        #   - build_user_vectors → empty (no embeddings found)
+        #   - CF co-occurrence → 0 (IDs not in index)
+        #   - CF embedding fallback → 0 (can't compute mean embedding)
         try:
             from ml.preprocessing.preprocess_songs import (
                 _read_csv_from_gcs,
@@ -246,12 +252,17 @@ def _run_ml_session(session_id: str):
             )
             csv_path   = _preprocessed_path(session_id)
             session_df = _read_csv_from_gcs(bucket, csv_path)
-            state.session_song_ids = set(
-                session_df["video_id"].dropna().unique()
-            )
+            raw_ids    = set(session_df["video_id"].dropna().unique())
+
+            # only keep IDs that exist in the BigQuery catalog
+            catalog_ids = set(state.songs_df["video_id"].values)
+            state.session_song_ids = raw_ids & catalog_ids
+
             logger.info(
-                "Loaded %d session song IDs from preprocessed CSV for CF seeding",
+                "Session songs: %d in CSV, %d match catalog (kept), %d unmatched (dropped)",
+                len(raw_ids),
                 len(state.session_song_ids),
+                len(raw_ids) - len(state.session_song_ids),
             )
         except Exception as exc:
             logger.warning("Could not load session songs for CF: %s", exc)

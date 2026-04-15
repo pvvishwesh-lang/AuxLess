@@ -414,22 +414,47 @@ def recommend_next_song(state: SessionState) -> dict:
     user_liked    = get_user_liked_songs(state.bq_client, state.user_ids)
     user_disliked = get_user_disliked_songs(state.bq_client, state.user_ids)
 
-    # ── Session song seed fallback ────────────────────────────────────────
-    # For new users who haven't completed a prior session, BigQuery's
-    # users table has no liked_songs (only populated on /end_session).
-    # Fall back to the batch pipeline output: the preprocessed songs from
-    # users' YouTube playlists. These ARE the session's taste preferences.
-    # This fixes BOTH CBF (real preference vector instead of catalog avg)
-    # and CF (non-empty group_liked_ids so scoring can proceed).
+    # ── Validate & augment liked songs ────────────────────────────────────
+    # Two data quality issues exist:
+    #   1. BQ user_liked may contain old video_ids not in the current catalog
+    #   2. New users have no BQ data; session playlist is their only signal
+    #
+    # Fix: filter ALL IDs against catalog, then ALWAYS merge session songs.
+    # This guarantees every video_id downstream has a valid embedding.
+    catalog_ids      = set(state.songs_df["video_id"].values)
     session_song_ids = getattr(state, "session_song_ids", set())
-    if not user_liked and session_song_ids:
+
+    # filter BQ liked songs — drop IDs that don't exist in catalog
+    filtered_liked = {}
+    dropped_count  = 0
+    for uid, vids in user_liked.items():
+        valid = [v for v in vids if v in catalog_ids]
+        dropped_count += len(vids) - len(valid)
+        if valid:
+            filtered_liked[uid] = valid
+
+    if dropped_count > 0:
         logger.info(
-            "No liked songs in BigQuery for session users. "
-            "Seeding from %d session playlist songs.",
+            "Filtered user_liked: dropped %d IDs not in catalog, "
+            "kept %d across %d users.",
+            dropped_count,
+            sum(len(v) for v in filtered_liked.values()),
+            len(filtered_liked),
+        )
+
+    # ALWAYS merge session playlist songs (already catalog-filtered in ml_trigger)
+    if session_song_ids:
+        filtered_liked["_session_playlist"] = list(session_song_ids)
+        logger.info(
+            "Merged %d session playlist songs into user_liked.",
             len(session_song_ids),
         )
-        user_liked = {"_session_playlist": list(session_song_ids)}
-    # ── End fallback ─────────────────────────────────────────────────────
+
+    user_liked = filtered_liked
+
+    if not user_liked:
+        logger.warning("No valid liked songs after filtering. Pipeline continues with catalog average.")
+    # ── End validation ────────────────────────────────────────────────────
 
     songs_played = len(play_sequence)
     gru_active   = (
@@ -483,15 +508,17 @@ def recommend_next_song(state: SessionState) -> dict:
     # _aggregate_scores() looks up cf_score per CBF candidate via dict,
     # so returning the full scored set avoids zeros from set mismatch.
     #
-    # When BigQuery's users table is sparse (new system), augment the
-    # CF population with the session's playlist songs. This gives the
-    # co-occurrence index actual data to work with.
-    cf_population = state.all_user_liked
+    # Augment population with session songs. Since user_liked is already
+    # filtered and merged, we use it directly. Also invalidate the cached
+    # co-occurrence index so it gets rebuilt with session songs included.
+    cf_population = {**state.all_user_liked}
     if session_song_ids:
-        cf_population = {
-            **state.all_user_liked,
-            "_session_playlist": list(session_song_ids),
-        }
+        cf_population["_session_playlist"] = list(session_song_ids)
+        # invalidate stale cache so index includes session songs
+        if hasattr(state, "_cf_cooccurrence"):
+            del state._cf_cooccurrence
+            del state._cf_popularity
+            logger.debug("CF cache invalidated — session songs added to population.")
 
     cf_df = get_cf_scores(
         all_user_liked=cf_population,

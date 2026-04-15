@@ -19,10 +19,7 @@ export const signInWithGoogle = async () => {
   const user   = result.user;
 
   const credential   = GoogleAuthProvider.credentialFromResult(result);
-  const refreshToken = result._tokenResponse?.refreshToken 
-    || result._tokenResponse?.oauthRefreshToken
-    || credential?.accessToken
-    || '';
+  const refreshToken = result._tokenResponse?.oauthRefreshToken || '';
 
   console.log('[Auth] Refresh token captured:', refreshToken ? '✅' : '❌');
 
@@ -146,7 +143,7 @@ export const exchangeCodeForToken = async (code) => {
 };
 
 export const getYouTubeAuthUrl = () => {
-  const clientId    = '863487778360-b0529i5rrliv5duo7f0j11bur369qo28.apps.googleusercontent.com';
+  const clientId = process.env.REACT_APP_YOUTUBE_CLIENT_ID;
   const redirectUri = encodeURIComponent(window.location.origin);
   const scope       = encodeURIComponent('https://www.googleapis.com/auth/youtube.readonly');
   return `https://accounts.google.com/o/oauth2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&access_type=offline&prompt=consent`;

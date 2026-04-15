@@ -191,16 +191,16 @@ class TestEmbeddingFallback:
 # ── Tests: get_cf_scores (full public API) ────────────────────────────────────
 
 class TestGetCfScores:
-    def test_returns_top_n_rows(self):
+    def test_returns_all_candidates(self):
+        """CF returns scores for ALL candidates — hybrid merger handles top-N."""
         songs_df = _make_songs_df(10)
         result = get_cf_scores(
             all_user_liked=_simple_population(),
             user_liked_songs={"user_1": ["vid_0", "vid_1"]},
             songs_df=songs_df,
             already_played_ids=set(),
-            top_n=5,
         )
-        assert len(result) == 5
+        assert len(result) == 10
 
     def test_output_columns_correct(self):
         songs_df = _make_songs_df(10)
@@ -233,9 +233,8 @@ class TestGetCfScores:
             user_liked_songs={"user_1": ["vid_0"]},
             songs_df=songs_df,
             already_played_ids=set(),
-            top_n=5,
         )
-        assert len(result) == 5
+        assert len(result) == 10
         assert (result["cf_score"] >= 0.0).all()
         assert (result["cf_score"] <= 1.0).all()
 
@@ -269,9 +268,8 @@ class TestGetCfScores:
             user_liked_songs={"user_1": ["vid_99", "vid_100"]},
             songs_df=songs_df,
             already_played_ids=set(),
-            top_n=5,
         )
-        assert len(result) == 5
+        assert len(result) == 10
 
     def test_empty_songs_df_returns_empty(self):
         result = get_cf_scores(
@@ -283,7 +281,8 @@ class TestGetCfScores:
         )
         assert result.empty
 
-    def test_top_n_zero_returns_empty_not_crash(self):
+    def test_top_n_ignored_returns_all_candidates(self):
+        """top_n is deprecated — CF returns all candidates regardless."""
         songs_df = _make_songs_df(10)
         result = get_cf_scores(
             all_user_liked=_simple_population(),
@@ -292,7 +291,7 @@ class TestGetCfScores:
             already_played_ids=set(),
             top_n=0,
         )
-        assert result.empty
+        assert len(result) == 10
 
     def test_all_songs_played_returns_empty(self):
         songs_df = _make_songs_df(5)

@@ -444,16 +444,27 @@ def recommend_next_song(state: SessionState) -> dict:
     )
 
     # build user vectors
+    global_vector = None
     if user_liked:
-        user_vectors  = build_user_vectors(
-            user_liked, user_disliked, state.songs_df
-        )
-        global_vector = build_global_vector(user_vectors)
-    else:
-        logger.warning(
-            "No user liked songs found in BigQuery. "
-            "Using average catalog embedding as fallback."
-        )
+        try:
+            user_vectors = build_user_vectors(
+                user_liked, user_disliked, state.songs_df
+            )
+            if user_vectors:
+                global_vector = build_global_vector(user_vectors)
+            else:
+                logger.warning(
+                    "build_user_vectors returned empty — liked song IDs "
+                    "may not match catalog. Falling back to catalog average."
+                )
+        except Exception as exc:
+            logger.warning(
+                "Failed to build user vectors: %s. "
+                "Falling back to catalog average.", exc
+            )
+
+    if global_vector is None:
+        logger.info("Using average catalog embedding as global vector.")
         all_embeddings = np.stack(state.songs_df["embedding"].values)
         global_vector  = np.mean(all_embeddings, axis=0, keepdims=True)
 
@@ -490,10 +501,10 @@ def recommend_next_song(state: SessionState) -> dict:
         state=state,
     )
 
-    # GRU — returns scores for ALL candidates (not top_n).
-    # _aggregate_scores() looks up gru_score per CBF candidate via dict,
-    # so returning the full scored set avoids zeros from set mismatch.
-    # Same fix as CF — removing top_n=TOP_N from the call.
+    # GRU — return scores for ALL candidates (not top_n), same pattern as CF.
+    # _aggregate_scores() uses CBF's top 30 as the base candidate set and
+    # maps GRU scores via dict lookup. If GRU only returns its own top 30,
+    # the two sets rarely overlap and gru_score = 0 for every final song.
     gru_df = pd.DataFrame()
     if gru_active:
         gru_df = get_gru_scores(
@@ -502,6 +513,7 @@ def recommend_next_song(state: SessionState) -> dict:
             embedding_lookup=state.embedding_lookup,
             songs_df=state.songs_df,
             already_played_ids=already_played,
+            top_n=len(state.songs_df),
         )
 
     # aggregate

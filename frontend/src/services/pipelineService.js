@@ -33,7 +33,7 @@ export async function writeSongEvent({ roomId, song, playOrder, sessionNum }) {
   const sid = toSid(roomId);
   try {
     const ref = await addDoc(collection(mlDb, 'sessions', sid, 'song_events'), {
-      video_id:       song?.id    || song?.video_id || '',
+      video_id:       song?.video_id || song?.id    || '',
       song_name:      song?.title || song?.song_name || '',
       artist:         song?.artist || '',
       genre:          song?.genre  || '',

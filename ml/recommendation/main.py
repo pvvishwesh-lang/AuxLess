@@ -446,13 +446,14 @@ def recommend_next_song(state: SessionState) -> dict:
         top_n=TOP_N,
     )
 
-    # CF
+    # CF — returns scores for ALL candidates (not top_n).
+    # _aggregate_scores() looks up cf_score per CBF candidate via dict,
+    # so returning the full scored set avoids zeros from set mismatch.
     cf_df = get_cf_scores(
         all_user_liked=state.all_user_liked,
         user_liked_songs=user_liked,
         songs_df=state.songs_df,
         already_played_ids=already_played,
-        top_n=TOP_N,
         state=state,
     )
 

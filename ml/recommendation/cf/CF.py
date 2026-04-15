@@ -30,9 +30,11 @@ Fallback strategy:
     the same [0, 1] range so _aggregate_scores() in main.py requires
     no special-casing.
 
-Output contract (mirrors CBF.py and gru_inference.py):
+Output contract:
     DataFrame with columns: video_id, track_title, artist_name, genre, cf_score
-    Sorted by cf_score descending.  Length = min(top_n, available candidates).
+    Sorted by cf_score descending.  Returns ALL scored candidates (not top_n)
+    so _aggregate_scores() in main.py can look up a CF score for every CBF
+    candidate without zeros from missing intersection.
     Empty DataFrame when songs_df is empty, all songs are played,
     or no group liked songs are available.
 """
@@ -244,7 +246,9 @@ def get_cf_scores(
         already_played_ids: set of video_ids played this session.
                             Excluded from candidates.
 
-        top_n:              Number of top-scoring songs to return.
+        top_n:              DEPRECATED — kept for backward compatibility.
+                            CF now returns all scored candidates; the hybrid
+                            merger in main.py handles the final top-N cut.
 
         min_cooccurrence:   Minimum overlap count to trust (from config).
 
@@ -257,7 +261,8 @@ def get_cf_scores(
     Returns:
         DataFrame with columns: video_id, track_title, artist_name,
                                  genre, cf_score
-        Sorted by cf_score descending, length = min(top_n, candidates).
+        Sorted by cf_score descending.  Returns ALL scored candidates
+        so the hybrid merger can look up any video_id without zeros.
         Empty DataFrame if no candidates remain after exclusion.
 
     Degradation path:
@@ -347,26 +352,27 @@ def get_cf_scores(
         lambda vid: raw_scores.get(vid, 0.0)
     )
 
-    if top_n < 1:
-        logger.warning(f"CF called with top_n={top_n}; returning empty.")
-        return pd.DataFrame()
-
-    recommendations = (
+    # ── Return ALL scored candidates — do NOT slice to top_n ────────────────
+    # The hybrid merger in _aggregate_scores() (main.py) uses CBF's top 30
+    # as the base set and looks up CF scores via cf_lookup.get(vid, 0.0).
+    # If we sliced to top_n here, any CBF song not in CF's top 30 would get
+    # 0.0 — wasting CF's weight allocation.  By returning the full scored
+    # catalog, every CBF candidate will find its true CF score.
+    candidate_songs = (
         candidate_songs
         .sort_values("cf_score", ascending=False)
-        .head(top_n)
         .reset_index(drop=True)
     )
 
-    if recommendations.empty:
-        logger.warning("CF: no recommendations after scoring.")
+    if candidate_songs.empty:
+        logger.warning("CF: no candidates after scoring.")
         return pd.DataFrame()
 
-    top = recommendations.iloc[0]
+    top = candidate_songs.iloc[0]
     logger.info(
-        f"CF top {top_n}: '{top['track_title']}' "
-        f"(cf_score={top['cf_score']:.4f}, "
+        f"CF scored {len(candidate_songs)} candidates "
+        f"(top: '{top['track_title']}', cf_score={top['cf_score']:.4f}, "
         f"{'co-occurrence' if not use_fallback else 'embedding fallback'})"
     )
 
-    return recommendations[["video_id", "track_title", "artist_name", "genre", "cf_score"]]
+    return candidate_songs[["video_id", "track_title", "artist_name", "genre", "cf_score"]]

@@ -147,7 +147,8 @@ def get_gru_scores(
 ) -> pd.DataFrame:
     """
     Runs GRU inference on current session play sequence.
-    Returns ranked candidate songs by GRU score.
+    Returns ALL candidate songs scored by GRU (not just top_n).
+    _aggregate_scores() in main.py handles the final top-N cut.
 
     Only activates when len(play_sequence) >= GRU_ACTIVATION_THRESHOLD.
 
@@ -157,11 +158,15 @@ def get_gru_scores(
         embedding_lookup:   { video_id: np.array(386,) }
         songs_df:           all songs DataFrame from BigQuery
         already_played_ids: set of video_ids played this session
-        top_n:              number of songs to return
+        top_n:              DEPRECATED — kept for backward compatibility.
+                            GRU now returns all scored candidates; the hybrid
+                            merger in main.py handles the final top-N cut.
 
     Returns:
         DataFrame with columns:
         video_id, track_title, artist_name, genre, gru_score
+        Sorted by gru_score descending. Returns ALL scored candidates
+        so the hybrid merger can look up any video_id without zeros.
         Empty DataFrame if GRU not yet activated.
     """
     # ── activation check ──────────────────────────────────────────────────────
@@ -197,21 +202,22 @@ def get_gru_scores(
         return pd.DataFrame()
 
     # ── cosine similarity against full catalog ────────────────────────────────
-    embedding_matrix         = np.stack(candidate_songs["embedding"].values)
-    gru_scores               = cosine_similarity(predicted_np, embedding_matrix)[0]
-    candidate_songs          = candidate_songs.copy()
+    embedding_matrix             = np.stack(candidate_songs["embedding"].values)
+    gru_scores                   = cosine_similarity(predicted_np, embedding_matrix)[0]
+    candidate_songs              = candidate_songs.copy()
     candidate_songs["gru_score"] = gru_scores
 
-    # ── rank and return top N ─────────────────────────────────────────────────
+    # ── Return ALL candidates ─────────────────────────────────────────────────
+    # Returning only top_n caused score mismatch with CBF's candidate pool.
+    # Same fix as CF — hybrid merger in main.py handles the final top-N cut.
     recommendations = (
         candidate_songs
         .sort_values("gru_score", ascending=False)
-        .head(top_n)
         .reset_index(drop=True)
     )
 
     logger.info(
-        f"GRU top {top_n}: "
+        f"GRU top: "
         f"'{recommendations.iloc[0]['track_title']}' "
         f"(gru_score={recommendations.iloc[0]['gru_score']:.4f})"
     )

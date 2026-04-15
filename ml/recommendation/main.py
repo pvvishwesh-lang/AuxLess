@@ -490,7 +490,10 @@ def recommend_next_song(state: SessionState) -> dict:
         state=state,
     )
 
-    # GRU
+    # GRU — returns scores for ALL candidates (not top_n).
+    # _aggregate_scores() looks up gru_score per CBF candidate via dict,
+    # so returning the full scored set avoids zeros from set mismatch.
+    # Same fix as CF — removing top_n=TOP_N from the call.
     gru_df = pd.DataFrame()
     if gru_active:
         gru_df = get_gru_scores(
@@ -499,7 +502,6 @@ def recommend_next_song(state: SessionState) -> dict:
             embedding_lookup=state.embedding_lookup,
             songs_df=state.songs_df,
             already_played_ids=already_played,
-            top_n=TOP_N,
         )
 
     # aggregate

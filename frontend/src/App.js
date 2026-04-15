@@ -14,6 +14,7 @@ import SettingsPage      from './pages/SettingsPage';
 import PlaylistsPage     from './pages/PlaylistsPage';
 import { db, mlDb }      from './config/firebase';
 import { doc, setDoc }   from 'firebase/firestore';
+import toast             from 'react-hot-toast';
 
 export default function App() {
   const { user, setUser, loading, logout } = useAuth();
@@ -24,21 +25,33 @@ export default function App() {
   const [roomId,  setRoomId]  = useState(savedRoom || null);
   const [showOnboard, setShowOnboard] = useState(false);
 
-  // ── Handle YouTube OAuth callback ─────────────────────────
+  // ── STEP 1: Capture YouTube code IMMEDIATELY on page load ──
+  // Runs once with no deps — grabs code before user state loads
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code   = params.get('code');
+    if (code) {
+      sessionStorage.setItem('pending_yt_code', code);
+      window.history.replaceState({}, '', window.location.pathname);
+      console.log('[App] YouTube code captured into sessionStorage');
+    }
+  }, []); // empty — runs immediately, no waiting for user
+
+  // ── STEP 2: Exchange code once user.uid is available ───────
+  // user?.uid dependency — fires when auth resolves
+  useEffect(() => {
+    const code = sessionStorage.getItem('pending_yt_code');
     if (!code || !user?.uid) return;
 
-    // Clean URL immediately
-    window.history.replaceState({}, '', window.location.pathname);
+    // Remove immediately so it doesn't run twice
+    sessionStorage.removeItem('pending_yt_code');
 
     exchangeCodeForToken(code).then(async (refreshToken) => {
       if (!refreshToken) {
-        console.warn('[App] No refresh token returned');
+        console.warn('[App] No refresh token returned — code may have expired');
         return;
       }
-      console.log('[App] ✅ YouTube token exchanged for user:', user.uid);
+      console.log('[App] ✅ YouTube refresh token saved for:', user.uid);
 
       localStorage.setItem('auxless_refresh_token', refreshToken);
 
@@ -54,10 +67,11 @@ export default function App() {
         updatedAt:     Date.now(),
       }, { merge: true }).catch(() => {});
 
-      // Update user state with new token
+      // Update user state
       setUser(u => ({ ...u, refreshToken }));
+      toast.success('YouTube connected! ✅');
 
-      // Check if user was trying to join a room before OAuth
+      // If user was trying to join a room before OAuth
       const pendingCode = sessionStorage.getItem('pending_join_code');
       if (pendingCode) {
         sessionStorage.removeItem('pending_join_code');

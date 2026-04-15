@@ -12,6 +12,7 @@ from backend.pipelines.api.bq_sync import sync_session_to_bigquery
 from ml.api.play_event_writer import write_play_event_from_feedback
 from ml.api.monitoring_routes import monitoring_bp
 import time
+from flask_cors import CORS
 
 
 logger = logging.getLogger()
@@ -22,7 +23,9 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 app = Flask(__name__)
+CORS(app)
 app.register_blueprint(monitoring_bp, url_prefix="/monitoring")
+
 
 def _run_session_safe(session_id: str):
     try:
@@ -195,6 +198,24 @@ def feedback():
     except Exception as e:
         logging.getLogger(__name__).error(f"Failed to publish feedback: {e}")
         return "Internal error", 500
+
+@app.route("/start_session", methods=["POST"])
+def start_session():
+    data = request.get_json(silent=True)
+    if not data or "session_id" not in data:
+        return "Missing session_id", 400
+    session_id = data["session_id"]
+    log = logging.getLogger(__name__)
+    try:
+        project_id  = os.environ["PROJECT_ID"]
+        database_id = os.environ["FIRESTORE_DATABASE"]
+        fs = FirestoreClient(project_id, database_id)
+        fs.update_session_status(session_id, "running")
+        log.info(f"Session {session_id} set to running — Firestore trigger will launch pipeline")
+    except Exception as e:
+        log.error(f"Failed to update session status: {e}")
+        return "Internal error", 500
+    return jsonify({"status": "accepted", "session_id": session_id}), 202
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))

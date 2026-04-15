@@ -42,8 +42,8 @@ def run_for_session(session_id: str):
     fs = FirestoreClient(project_id, database_id)
 
     status = fs.get_session_status(session_id)
-    if status not in ["running"]:
-        logger.info(f"Session {session_id} is '{status}', not 'running'. Skipping.")
+    if status not in ["running", "processing"]:
+        logger.info(f"Session {session_id} is '{status}', not running. Skipping.")
         return
 
     users = fs.get_session_users(session_id)

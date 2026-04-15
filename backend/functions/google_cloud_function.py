@@ -14,40 +14,34 @@ topic_path = publisher.topic_path(PROJECT_ID, PUBSUB_TOPIC)
 
 def claim_session(session_id):
     doc_ref = db.collection("sessions").document(session_id)
-
     @firestore.transactional
     def transaction_claim(transaction):
         snapshot = doc_ref.get(transaction=transaction)
         if not snapshot.exists:
             return False
         status = snapshot.get("status")
-        if status != "pending":
+        if status != "running":
             return False
-        transaction.update(doc_ref, {"status": "running"})
+        transaction.update(doc_ref, {"status": "processing"})
         return True
-
     transaction = db.transaction()
     return transaction_claim(transaction)
-
 
 @functions_framework.cloud_event
 def firestore_session_trigger(cloud_event):
     firestore_payload = DocumentEventData.deserialize(cloud_event.data)
     new_doc = firestore_payload.value
     session_id = new_doc.name.split("/")[-1]
-
     if not new_doc:
         return
-        
     new_fields = new_doc.fields
     new_status = new_fields.get("status").string_value if "status" in new_fields else None
-
-    if new_status == "pending":
+    if new_status == "running":
         claimed = claim_session(session_id)
         if not claimed:
-            print("Session claimed. Skipping")
+            print("Session already claimed. Skipping")
             return
         future = publisher.publish(topic_path, session_id.encode("utf-8"))
         print(f"Published session {session_id} to Pub/Sub: {future.result()}")
     else:
-        print(f"Ignoring update. Status is {new_status}")
+        print(f"Ignoring. Status is {new_status}")

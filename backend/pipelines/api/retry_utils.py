@@ -16,6 +16,9 @@ def retry(retries: int = 3, delay: float = 2):
                     return fn(*args, **kwargs)
                 except Exception as e:
                     last_exception = e
+                    response = getattr(e, 'response', None)
+                    if response is not None and response.status_code in (403, 404):
+                        raise
                     wait = min(delay * (2 ** attempt), MAX_BACKOFF_SECONDS)
                     logger.warning(f"[{fn.__name__}] Attempt {attempt + 1}/{retries} failed: {e}. Retrying in {wait}s...")
                     time.sleep(wait)

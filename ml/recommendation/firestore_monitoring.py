@@ -268,8 +268,12 @@ class MonitoringWriter:
 def read_session_state(db: firestore.Client, session_id: str) -> dict[str, Any]:
     """
     Returns the current session state for the dashboard Session State panel.
-    Reads from the root session document (written by your existing pipeline)
-    and aggregates play_events for feedback counts.
+
+    Data sources (from Firestore subcollections written by the frontend):
+      songs_played    → song_events (one doc per song played; has genre, play_order)
+      feedback_counts → feedback_events (event_type: like/dislike/skip/replay)
+      user_count      → users array on root session document
+      phase/weights   → latest rec_snapshot (written by ML pipeline)
     """
     session_ref = db.collection(_SESSIONS).document(session_id)
     session_doc = session_ref.get()
@@ -278,22 +282,54 @@ def read_session_state(db: firestore.Client, session_id: str) -> dict[str, Any]:
 
     data = session_doc.to_dict() or {}
 
-    play_events = (
-        session_ref.collection(_PLAY_EVENTS)
-        .order_by("ts_ms", direction=firestore.Query.DESCENDING)
-        .limit(200)
-        .stream()
-    )
-    feedback_counts = {"like": 0, "skip": 0, "replay": 0, "dislike": 0, "neutral": 0}
-    songs_played = 0
-    total_duration = 0.0
+    # ── user_count ────────────────────────────────────────────────────────
+    users = data.get("users", [])
+    user_count = len(users) if users else data.get("user_count", 0)
 
-    for evt in play_events:
-        e = evt.to_dict()
-        fb = e.get("feedback", "neutral")
-        feedback_counts[fb] = feedback_counts.get(fb, 0) + 1
-        songs_played += 1
-        total_duration += e.get("play_duration_sec", 0.0)
+    # ── songs_played from song_events ─────────────────────────────────────
+    # Schema: { artist, genre, liked_flag, play_order, session_number,
+    #           song_name, timestamp, video_id }
+    songs_played = 0
+    try:
+        song_docs = list(
+            session_ref.collection("song_events").limit(500).stream()
+        )
+        songs_played = len(song_docs)
+    except Exception as exc:
+        logger.debug("Could not read song_events: %s", exc)
+
+    # fallback: metadata or session doc
+    if songs_played == 0:
+        songs_played = data.get("songs_played_count", 0)
+        if songs_played == 0:
+            try:
+                meta_doc = session_ref.collection("metadata").document("state").get()
+                if meta_doc.exists:
+                    md = meta_doc.to_dict()
+                    songs_played = md.get("songs_played_count",
+                                   md.get("last_refreshed_at", 0))
+            except Exception:
+                pass
+
+    # ── feedback_counts from feedback_events ──────────────────────────────
+    # Schema: { event_type, artist, song_name, song_id, room_id,
+    #           user_id, timestamp }
+    feedback_counts = {"like": 0, "skip": 0, "replay": 0, "dislike": 0, "neutral": 0}
+    try:
+        fb_docs = list(
+            session_ref.collection("feedback_events").limit(500).stream()
+        )
+        for evt in fb_docs:
+            e = evt.to_dict()
+            fb = e.get("event_type",
+                 e.get("action",
+                 e.get("feedback", "neutral")))
+            if fb in ("like", "dislike", "skip", "replay"):
+                feedback_counts[fb] = feedback_counts.get(fb, 0) + 1
+            else:
+                feedback_counts["neutral"] += 1
+    except Exception as exc:
+        logger.debug("Could not read feedback_events: %s", exc)
 
     latest_rec = _latest_doc(session_ref, _REC_SNAP)
 
@@ -303,9 +339,9 @@ def read_session_state(db: firestore.Client, session_id: str) -> dict[str, Any]:
         "weights": latest_rec.get("weights", {"cbf": 0.6, "cf": 0.4, "gru": 0.0}) if latest_rec else {"cbf": 0.6, "cf": 0.4, "gru": 0.0},
         "songs_played": songs_played,
         "feedback_counts": feedback_counts,
-        "avg_play_duration_sec": round(total_duration / songs_played, 2) if songs_played else 0.0,
+        "avg_play_duration_sec": 0.0,
         "status": data.get("status", "active"),
-        "user_count": data.get("user_count", 0),
+        "user_count": user_count,
         "created_at": _serialize_ts(data.get("created_at")),
     }
 
@@ -359,41 +395,53 @@ def read_system_stats(
     db: firestore.Client, session_id: str
 ) -> dict[str, Any]:
     """
-    Aggregates play_events for the System Stats panel:
+    Aggregates song_events and feedback_events for the System Stats panel:
     genre distribution, popularity histogram buckets,
-    diversity trend (entropy per rec cycle), avg play time.
+    diversity trend (entropy per rec cycle), avg feedback score.
     """
     session_ref = db.collection(_SESSIONS).document(session_id)
 
-    # --- play events aggregation ---
-    play_docs = list(
-        session_ref.collection(_PLAY_EVENTS)
-        .order_by("ts_ms")
-        .limit(500)
-        .stream()
-    )
+    # ── genre distribution from song_events ───────────────────────────────
+    # Schema: { artist, genre, liked_flag, play_order, session_number,
+    #           song_name, timestamp, video_id }
     genre_counts: dict[str, int] = {}
-    feedback_timeline: list[dict] = []
-    durations: list[float] = []
-    feedback_scores: list[float] = []
+    total_plays = 0
+    try:
+        song_docs = list(
+            session_ref.collection("song_events").limit(500).stream()
+        )
+        total_plays = len(song_docs)
+        for doc in song_docs:
+            e = doc.to_dict()
+            genre = e.get("genre", "Unknown")
+            genre_counts[genre] = genre_counts.get(genre, 0) + 1
+    except Exception:
+        pass
 
-    fb_score_map = {"like": 1.0, "replay": 0.75, "neutral": 0.0, "skip": -0.5, "dislike": -1.0}
-
-    for doc in play_docs:
-        e = doc.to_dict()
-        genre = e.get("genre", "Unknown")
-        genre_counts[genre] = genre_counts.get(genre, 0) + 1
-        dur = e.get("play_duration_sec", 0.0)
-        durations.append(dur)
-        fb = e.get("feedback", "neutral")
-        feedback_scores.append(fb_score_map.get(fb, 0.0))
-        feedback_timeline.append({"fb": fb, "genre": genre, "dur": dur})
-
-    total_plays = len(play_docs)
     genre_distribution = {
         g: round(c / total_plays, 4) if total_plays else 0
         for g, c in sorted(genre_counts.items(), key=lambda x: -x[1])
     }
+
+    # ── feedback scores from feedback_events ──────────────────────────────
+    # Schema: { event_type, artist, song_name, song_id, room_id,
+    #           user_id, timestamp }
+    fb_score_map = {"like": 1.0, "replay": 0.75, "neutral": 0.0, "skip": -0.5, "dislike": -1.0}
+    feedback_scores: list[float] = []
+    try:
+        fb_docs = list(
+            session_ref.collection("feedback_events").limit(500).stream()
+        )
+        for doc in fb_docs:
+            e = doc.to_dict()
+            fb = e.get("event_type",
+                 e.get("action",
+                 e.get("feedback", "neutral")))
+            if fb in ("play", "complete"):
+                fb = "neutral"
+            feedback_scores.append(fb_score_map.get(fb, 0.0))
+    except Exception:
+        pass
 
     # popularity histogram: bucket final_scores from rec snapshots
     rec_docs = list(
@@ -422,7 +470,6 @@ def read_system_stats(
 
     pop_histogram = _histogram(all_scores, bins=10, lo=0.0, hi=1.0)
 
-    avg_play_sec = round(sum(durations) / len(durations), 2) if durations else 0.0
     avg_feedback_score = round(sum(feedback_scores) / len(feedback_scores), 4) if feedback_scores else 0.0
 
     return {
@@ -430,7 +477,7 @@ def read_system_stats(
         "genre_distribution": genre_distribution,
         "popularity_histogram": pop_histogram,
         "diversity_trend": diversity_trend,
-        "avg_play_duration_sec": avg_play_sec,
+        "avg_play_duration_sec": 0.0,
         "avg_feedback_score": avg_feedback_score,
         "feedback_score_interpretation": _feedback_interpretation(avg_feedback_score),
     }

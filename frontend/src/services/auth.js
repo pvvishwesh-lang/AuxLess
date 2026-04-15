@@ -130,8 +130,8 @@ export const exchangeCodeForToken = async (code) => {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         code,
-        client_id:     '863487778360-b0529i5rrliv5duo7f0j11bur369qo28.apps.googleusercontent.com',
-        client_secret: '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',
+        client_id:     process.env.REACT_APP_YOUTUBE_CLIENT_ID,
+        client_secret: process.env.REACT_APP_YOUTUBE_CLIENT_SECRET,
         redirect_uri:  window.location.origin,
         grant_type:    'authorization_code',
       }),

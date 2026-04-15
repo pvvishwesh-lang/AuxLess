@@ -4,13 +4,19 @@ import { T } from '../styles/tokens';
 import Btn from '../components/Btn';
 import { db, mlDb } from '../config/firebase';
 import { doc, setDoc } from 'firebase/firestore';
+import { getYouTubeAuthUrl } from '../services/auth';
 
-export default function TabCreate({ user, onEnterRoom }) {
+export default function TabCreate({ user, onEnterRoom, onGoToSettings }) {
   const [name,     setName]     = useState('');
   const [priv,     setPriv]     = useState(false);
   const [creating, setCreating] = useState(false);
   const [done,     setDone]     = useState(false);
   const [roomCode, setRoomCode] = useState('');
+
+  const hasYouTubeToken = !!(
+    user?.refreshToken?.startsWith('1//') ||
+    localStorage.getItem('auxless_refresh_token')?.startsWith('1//')
+  );
 
   const sha256Short = async (str) => {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
@@ -27,13 +33,12 @@ export default function TabCreate({ user, onEnterRoom }) {
       const code    = 'AUX-' + hash;
       const session = hash.toLowerCase();
 
-      // Get user's own refresh token
       const refreshToken = user?.refreshToken
         || localStorage.getItem('auxless_refresh_token')
         || process.env.REACT_APP_YOUTUBE_REFRESH_TOKEN
         || '';
 
-      // 1. YOUR Firestore — await this
+      // 1. YOUR Firestore
       await setDoc(doc(db, 'rooms', code), {
         code,
         name:       name.trim(),
@@ -57,11 +62,11 @@ export default function TabCreate({ user, onEnterRoom }) {
         }],
       });
 
-      // 2. ML Firestore — status: waiting so pipeline doesn't trigger yet
+      // 2. ML Firestore
       setDoc(doc(mlDb, 'sessions', session), {
         session_id:    session,
         room_code:     code,
-        status: 'pending',
+        status:        'pending',
         createdAt:     Date.now(),
         users: [{
           user_id:       user?.uid  || 'guest',
@@ -73,7 +78,7 @@ export default function TabCreate({ user, onEnterRoom }) {
         }],
       }).catch(e => console.warn('mlDb session failed:', e));
 
-      // 3. ML metadata — NO await, background
+      // 3. ML metadata
       setDoc(doc(mlDb, 'sessions', session, 'metadata', 'state'), {
         songs_played_count: 0,
         session_number:     1,
@@ -93,6 +98,16 @@ export default function TabCreate({ user, onEnterRoom }) {
     }
   };
 
+  const handleEnterRoom = () => {
+    if (!hasYouTubeToken) {
+      toast.error('Connect YouTube first so ML can fetch your playlists!', { duration: 3000, icon: '⚠️' });
+      // Redirect to YouTube OAuth directly
+      window.location.href = getYouTubeAuthUrl();
+      return;
+    }
+    onEnterRoom(roomCode);
+  };
+
   if (done) return (
     <div className="fade-up" style={{ maxWidth: 440, margin: '60px auto', padding: '0 24px' }}>
       <div style={{ background: T.card, borderRadius: 22, border: `1px solid ${T.green}44`, padding: '32px 28px', textAlign: 'center' }}>
@@ -108,6 +123,27 @@ export default function TabCreate({ user, onEnterRoom }) {
           onClick={() => { navigator.clipboard?.writeText(roomCode); toast.success('Code copied!'); }}
           style={{ padding: '8px 20px', borderRadius: 8, marginBottom: 20, background: T.greenLo, border: `1px solid ${T.green}44`, color: T.green, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
         >📋 Copy code</button>
+
+        {/* YouTube connect warning */}
+        {!hasYouTubeToken && (
+          <div style={{ background: 'rgba(251,191,36,0.1)', borderRadius: 12, padding: '14px 16px',
+            border: '1px solid rgba(251,191,36,0.3)', marginBottom: 20, textAlign: 'left' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#FBB724', marginBottom: 6 }}>
+              ⚠️ YouTube not connected
+            </div>
+            <div style={{ fontSize: 12, color: T.muted, marginBottom: 10, lineHeight: 1.5 }}>
+              Connect YouTube so ML can fetch your playlists and generate recommendations.
+            </div>
+            <button
+              onClick={() => { window.location.href = getYouTubeAuthUrl(); }}
+              style={{ width: '100%', padding: '10px', borderRadius: 10, background: '#FF000022',
+                border: '1px solid #FF000044', color: '#FF4444', fontSize: 13, fontWeight: 700,
+                cursor: 'pointer' }}>
+              ▶ Connect YouTube first
+            </button>
+          </div>
+        )}
+
         {(user?.genres?.length > 0 || user?.artists?.length > 0) && (
           <div style={{ background: T.purpleLo, borderRadius: 12, padding: '14px 16px', border: `1px solid ${T.purple}33`, marginBottom: 20, textAlign: 'left' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: T.purple, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10 }}>🧠 Your taste seeds the ML</div>
@@ -124,7 +160,10 @@ export default function TabCreate({ user, onEnterRoom }) {
             <div style={{ fontSize: 11, color: T.muted, marginTop: 8 }}>Share the code with guests then click Start Session! 🚀</div>
           </div>
         )}
-        <Btn onClick={() => onEnterRoom(roomCode)} full icon="🎵">Enter room →</Btn>
+
+        <Btn onClick={handleEnterRoom} full icon="🎵">
+          {hasYouTubeToken ? 'Enter room →' : 'Connect YouTube & Enter →'}
+        </Btn>
       </div>
     </div>
   );
@@ -145,6 +184,31 @@ export default function TabCreate({ user, onEnterRoom }) {
             </div>
           </div>
         )}
+
+        {/* YouTube status banner */}
+        <div style={{ padding: '10px 14px', borderRadius: 10,
+          background: hasYouTubeToken ? T.greenLo : 'rgba(251,191,36,0.08)',
+          border: `1px solid ${hasYouTubeToken ? T.green+'33' : 'rgba(251,191,36,0.3)'}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: hasYouTubeToken ? T.green : '#FBB724' }}>
+                {hasYouTubeToken ? '✅ YouTube connected' : '⚠️ YouTube not connected'}
+              </div>
+              <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
+                {hasYouTubeToken ? 'ML will fetch your playlists' : 'Required for ML recommendations'}
+              </div>
+            </div>
+            {!hasYouTubeToken && (
+              <button onClick={() => { window.location.href = getYouTubeAuthUrl(); }}
+                style={{ padding: '6px 12px', borderRadius: 8, background: '#FF000022',
+                  border: '1px solid #FF000044', color: '#FF4444', fontSize: 11,
+                  fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                Connect ▶
+              </button>
+            )}
+          </div>
+        </div>
+
         <div style={{ padding: '12px 14px', borderRadius: 10, background: T.greenLo, border: `1px solid ${T.green}33` }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: T.green, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>🧠 How AuxLess works</div>
           <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.7 }}>

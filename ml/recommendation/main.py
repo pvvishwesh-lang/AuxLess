@@ -100,6 +100,9 @@ class SessionState:
       monitoring_writer  — MonitoringWriter instance set by ml_trigger.py.
                            Optional: if None, monitoring writes are skipped
                            silently so the pipeline is never blocked.
+      session_song_ids   — set of video_ids from the batch pipeline output.
+                           Used as CF/CBF seeds when BigQuery users table is
+                           empty (first-time users). Set by ml_trigger.py.
     """
     def __init__(self):
         self.session_id:       str              = None
@@ -113,6 +116,7 @@ class SessionState:
         self.all_user_liked:   dict             = {}     # full population for CF
         self.last_batch_songs: list             = []     # monitoring: last batch
         self.monitoring_writer:object           = None   # monitoring: set by trigger
+        self.session_song_ids: set              = set()  # CF seed: set by trigger
 
 
 # ── Firestore writer ──────────────────────────────────────────────────────────
@@ -315,7 +319,7 @@ def _build_scored_songs(recommendations: pd.DataFrame) -> list[dict]:
     handles the missing column gracefully by using final_score as a proxy.
     """
     scored = []
-    for _, row in recommendations.iterrows():
+    for rank, (_, row) in enumerate(recommendations.iterrows(), start=1):
         scored.append({
             "video_id":        str(row.get("video_id",     "")),
             "title":           str(row.get("track_title",  "")),
@@ -325,6 +329,7 @@ def _build_scored_songs(recommendations: pd.DataFrame) -> list[dict]:
             "cf_score":        round(float(row.get("cf_score",   0.0)), 4),
             "gru_score":       round(float(row.get("gru_score",  0.0)), 4),
             "final_score":     round(float(row.get("final_score",0.0)), 4),
+            "rank":            rank,
         })
     return scored
 
@@ -409,6 +414,23 @@ def recommend_next_song(state: SessionState) -> dict:
     user_liked    = get_user_liked_songs(state.bq_client, state.user_ids)
     user_disliked = get_user_disliked_songs(state.bq_client, state.user_ids)
 
+    # ── Session song seed fallback ────────────────────────────────────────
+    # For new users who haven't completed a prior session, BigQuery's
+    # users table has no liked_songs (only populated on /end_session).
+    # Fall back to the batch pipeline output: the preprocessed songs from
+    # users' YouTube playlists. These ARE the session's taste preferences.
+    # This fixes BOTH CBF (real preference vector instead of catalog avg)
+    # and CF (non-empty group_liked_ids so scoring can proceed).
+    session_song_ids = getattr(state, "session_song_ids", set())
+    if not user_liked and session_song_ids:
+        logger.info(
+            "No liked songs in BigQuery for session users. "
+            "Seeding from %d session playlist songs.",
+            len(session_song_ids),
+        )
+        user_liked = {"_session_playlist": list(session_song_ids)}
+    # ── End fallback ─────────────────────────────────────────────────────
+
     songs_played = len(play_sequence)
     gru_active   = (
         state.gru_model is not None and
@@ -449,8 +471,19 @@ def recommend_next_song(state: SessionState) -> dict:
     # CF — returns scores for ALL candidates (not top_n).
     # _aggregate_scores() looks up cf_score per CBF candidate via dict,
     # so returning the full scored set avoids zeros from set mismatch.
+    #
+    # When BigQuery's users table is sparse (new system), augment the
+    # CF population with the session's playlist songs. This gives the
+    # co-occurrence index actual data to work with.
+    cf_population = state.all_user_liked
+    if session_song_ids:
+        cf_population = {
+            **state.all_user_liked,
+            "_session_playlist": list(session_song_ids),
+        }
+
     cf_df = get_cf_scores(
-        all_user_liked=state.all_user_liked,
+        all_user_liked=cf_population,
         user_liked_songs=user_liked,
         songs_df=state.songs_df,
         already_played_ids=already_played,

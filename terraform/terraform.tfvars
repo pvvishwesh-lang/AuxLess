@@ -1,4 +1,4 @@
-project_id         = "project-5a7a81fd-debc-4043-906"
+project_id         = "auxelss-recommender"
 region             = "europe-west1"
 dataflow_region    = "us-west1"
 firestore_location = "nam5"

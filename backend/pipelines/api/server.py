@@ -281,10 +281,10 @@ def monitoring_health():
             "timestamp": time.time(),
         }), 200
     except Exception as e:
-        log.error(f"Health check failed: {e}")
+        log.error("Health check failed", exc_info=True)
         return jsonify({
             "status":    "unhealthy",
-            "error":     str(e),
+            "error":     "Internal server error",
             "timestamp": time.time(),
         }), 500
 

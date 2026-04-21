@@ -11,3 +11,4 @@ sentence-transformers==3.0.0
 tf-keras
 mlflow
 optuna
+google-cloud-monitoring

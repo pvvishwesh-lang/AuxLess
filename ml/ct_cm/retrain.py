@@ -30,7 +30,7 @@ from typing import Optional
 
 import numpy as np
 import torch
-from google.cloud import firestore, storage, monitoring_v3
+from google.cloud import firestore, storage
 
 from ml.recommendation.config import (
     PROJECT_ID,
@@ -49,10 +49,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-IMPROVEMENT_THRESHOLD  = 0.01   # new model must beat production by at least 1%
-MIN_SESSIONS_REQUIRED  = 50     # minimum real sessions before retraining
-MIN_SONGS_PER_SESSION  = 5      # minimum songs played to use a session
-LOOKBACK_DAYS          = 30     # fetch sessions from last 30 days
+IMPROVEMENT_THRESHOLD  = 0.01
+MIN_SESSIONS_REQUIRED  = 50
+MIN_SONGS_PER_SESSION  = 5
+LOOKBACK_DAYS          = 30
 GCS_BUCKET             = os.environ.get("ML_MODELS_BUCKET", "auxless-music-recommender-ml-models")
 MODEL_BLOB             = "models/gru_model.pt"
 MODEL_BACKUP_BLOB      = "models/gru_model_backup_{ts}.pt"
@@ -75,14 +75,12 @@ def fetch_real_sessions(db: firestore.Client, lookback_days: int = LOOKBACK_DAYS
         ...
     ]
     """
-    cutoff = datetime.utcnow() - timedelta(days=lookback_days)
     sessions = []
 
     try:
         session_docs = db.collection("sessions").stream()
         for session_doc in session_docs:
             data = session_doc.to_dict() or {}
-            # only use completed sessions
             if data.get("status") not in ("ended", "done"):
                 continue
 
@@ -125,7 +123,7 @@ def build_training_samples(
 ) -> list:
     """
     Converts real play sequences into (input_tensor, target_embedding) pairs.
-    Same format as synthetic training — compatible with SessionDataset.
+    Same format as synthetic training — compatible with train().
 
     For each session of length N, generates N-1 subsequence samples:
       [s1] → s2_embedding
@@ -135,7 +133,6 @@ def build_training_samples(
     samples = []
 
     for sequence in sessions:
-        # filter out songs not in embedding lookup
         valid_seq = [
             evt for evt in sequence
             if evt["video_id"] in embedding_lookup
@@ -144,12 +141,10 @@ def build_training_samples(
         if len(valid_seq) < 2:
             continue
 
-        # generate subsequence samples
         for i in range(1, len(valid_seq)):
             history = valid_seq[:i]
             target  = valid_seq[i]
 
-            # build input tensor (left-padded to MAX_SEQ_LEN)
             seq_tensors = []
             for evt in history:
                 emb  = embedding_lookup[evt["video_id"]]
@@ -175,7 +170,7 @@ def build_training_samples(
 def get_production_val_loss() -> float:
     """
     Reads the last recorded val_loss from retrain_history.json in GCS.
-    Returns a high default if no history exists (forces first retrain to deploy).
+    Returns inf if no history exists — forces first retrain to deploy.
     """
     try:
         client = storage.Client()
@@ -204,13 +199,10 @@ def save_retrain_history(result: dict):
 
 # ── Deploy new model to GCS ───────────────────────────────────────────────────
 def deploy_model(model: torch.nn.Module, val_loss: float):
-    """
-    Backs up current production model then uploads new model.
-    """
+    """Backs up current production model then uploads new model."""
     client = storage.Client()
     bucket = client.bucket(GCS_BUCKET)
 
-    # backup current model
     try:
         ts          = int(time.time())
         backup_blob = MODEL_BACKUP_BLOB.format(ts=ts)
@@ -219,7 +211,6 @@ def deploy_model(model: torch.nn.Module, val_loss: float):
     except Exception as e:
         logger.warning(f"Could not backup current model: {e}")
 
-    # upload new model
     buffer = io.BytesIO()
     torch.save(model.state_dict(), buffer)
     buffer.seek(0)
@@ -230,6 +221,7 @@ def deploy_model(model: torch.nn.Module, val_loss: float):
 # ── Publish metrics to Cloud Monitoring ──────────────────────────────────────
 def publish_retrain_metrics(val_loss: float, deployed: bool, num_sessions: int):
     """Writes retraining metrics to Cloud Monitoring custom metrics."""
+    from google.cloud import monitoring_v3
     try:
         client     = monitoring_v3.MetricServiceClient()
         project    = f"projects/{PROJECT_ID}"
@@ -269,12 +261,10 @@ def run_retraining() -> dict:
     Full CT pipeline:
     1. Fetch real session sequences from Firestore
     2. Build training samples
-    3. Retrain GRU
+    3. Retrain GRU using real sequences (90/10 train/val split)
     4. Compare val_loss vs production
     5. Deploy if improved
     6. Log results
-
-    Returns result dict with deployment decision and metrics.
     """
     logger.info("=" * 60)
     logger.info("Starting GRU retraining pipeline")
@@ -287,11 +277,11 @@ def run_retraining() -> dict:
 
     if len(sessions) < MIN_SESSIONS_REQUIRED:
         result = {
-            "status":        "skipped",
-            "reason":        f"Only {len(sessions)} sessions available, need {MIN_SESSIONS_REQUIRED}",
-            "num_sessions":  len(sessions),
-            "deployed":      False,
-            "timestamp":     datetime.utcnow().isoformat(),
+            "status":       "skipped",
+            "reason":       f"Only {len(sessions)} sessions available, need {MIN_SESSIONS_REQUIRED}",
+            "num_sessions": len(sessions),
+            "deployed":     False,
+            "timestamp":    datetime.utcnow().isoformat(),
         }
         logger.info(f"Retraining skipped: {result['reason']}")
         write_retrain_event(db, result)
@@ -317,13 +307,16 @@ def run_retraining() -> dict:
         write_retrain_event(db, result)
         return result
 
-    # step 4: retrain GRU
-    logger.info(f"Retraining GRU on {len(samples)} real samples...")
+    # step 4: retrain GRU — split into train/val (90/10)
+    split      = max(1, int(len(samples) * 0.9))
+    train_seqs = samples[:split]
+    val_seqs   = samples[split:] if samples[split:] else samples[:max(1, len(samples) // 10)]
+
+    logger.info(f"Retraining GRU on {len(train_seqs)} train, {len(val_seqs)} val samples...")
     model, new_val_loss = train(
-        songs_df=songs_df,
-        real_samples=samples,
-        num_sessions=0,          # 0 = use only real data
-        use_real_data=True,
+        train_seqs=train_seqs,
+        val_seqs=val_seqs,
+        embedding_lookup=embedding_lookup,
     )
 
     # step 5: compare vs production
@@ -341,16 +334,16 @@ def run_retraining() -> dict:
 
     # step 6: log results
     result = {
-        "status":               "completed",
-        "deployed":             deployed,
-        "new_val_loss":         round(new_val_loss, 4),
-        "production_val_loss":  round(production_val_loss, 4),
-        "improvement":          round(improvement, 4),
-        "num_sessions":         len(sessions),
-        "num_samples":          len(samples),
-        "timestamp":            datetime.utcnow().isoformat(),
-        "reason":               "Deployed — val_loss improved" if deployed
-                                else f"Not deployed — improvement {improvement:.4f} below threshold {IMPROVEMENT_THRESHOLD}",
+        "status":              "completed",
+        "deployed":            deployed,
+        "new_val_loss":        round(new_val_loss, 4),
+        "production_val_loss": round(production_val_loss, 4),
+        "improvement":         round(improvement, 4),
+        "num_sessions":        len(sessions),
+        "num_samples":         len(samples),
+        "timestamp":           datetime.utcnow().isoformat(),
+        "reason":              "Deployed - val_loss improved" if deployed
+                               else f"Not deployed - improvement {improvement:.4f} below threshold {IMPROVEMENT_THRESHOLD}",
     }
     if deployed:
         result["production_val_loss"] = round(new_val_loss, 4)

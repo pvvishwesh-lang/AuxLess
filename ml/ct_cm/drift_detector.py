@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import numpy as np
-from google.cloud import firestore, monitoring_v3
+from google.cloud import firestore
 
 from ml.recommendation.config import PROJECT_ID, DATABASE_ID
 
@@ -126,6 +126,7 @@ def kl_divergence(p: dict, q: dict, epsilon: float = 1e-10) -> float:
 # ── Publish drift metrics to Cloud Monitoring ─────────────────────────────────
 def publish_drift_metrics(kl_score: float, drift_detected: bool):
     """Writes drift metrics to Cloud Monitoring custom metrics."""
+    from google.cloud import monitoring_v3
     try:
         client  = monitoring_v3.MetricServiceClient()
         project = f"projects/{PROJECT_ID}"

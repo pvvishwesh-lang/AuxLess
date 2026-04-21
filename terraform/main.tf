@@ -7,7 +7,7 @@ terraform {
     }
   }
   backend "gcs" {
-  bucket = "auxless-music-recommender-tfstate"
+  bucket = "auxelss-recommender-tfstate"
   prefix = "terraform/state"
   }
 }

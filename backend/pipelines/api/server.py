@@ -230,35 +230,55 @@ def retrain():
     """
     Continuous Training (CT) trigger endpoint.
     Called by Cloud Scheduler every 3 days.
-    Runs drift detection first, then GRU retraining.
-    Deploys new model to GCS only if val_loss improves.
+
+    Flow:
+      1. Run drift detection — always executes
+      2. If drift detected (KL > 0.3) — trigger GRU retraining
+      3. If no drift — skip retraining, log and return
+
+    Deploys new model to GCS only if val_loss improves by > 0.01.
     """
     log = logging.getLogger(__name__)
-    log.info("Retraining pipeline triggered")
+    log.info("CT/CM pipeline triggered")
 
     def _run_retrain():
         try:
+            # step 1: drift detection — always runs
             from ml.ct_cm.drift_detector import run_drift_detection
             drift_result = run_drift_detection()
+            kl_score     = drift_result.get("kl_divergence", 0)
+            drift        = drift_result.get("drift_detected", False)
             log.info(
-                f"Drift detection complete: KL={drift_result.get('kl_divergence', 0):.4f}, "
-                f"drift_detected={drift_result.get('drift_detected', False)}"
+                f"Drift detection complete: KL={kl_score:.4f}, "
+                f"drift_detected={drift}"
             )
-            from ml.ct_cm.retrain import run_retraining
-            retrain_result = run_retraining()
-            log.info(
-                f"Retraining complete: deployed={retrain_result.get('deployed', False)}, "
-                f"val_loss={retrain_result.get('new_val_loss', 'N/A')}"
-            )
+
+            # step 2: retraining — only runs if drift detected
+            if drift:
+                log.info(
+                    f"Drift detected (KL={kl_score:.4f} > 0.3) — triggering GRU retraining"
+                )
+                from ml.ct_cm.retrain import run_retraining
+                retrain_result = run_retraining()
+                log.info(
+                    f"Retraining complete: deployed={retrain_result.get('deployed', False)}, "
+                    f"val_loss={retrain_result.get('new_val_loss', 'N/A')}"
+                )
+            else:
+                log.info(
+                    f"No drift detected (KL={kl_score:.4f} below threshold 0.3) "
+                    f"— skipping retraining"
+                )
+
         except Exception as e:
-            log.error(f"Retraining pipeline failed: {e}", exc_info=True)
+            log.error(f"CT/CM pipeline failed: {e}", exc_info=True)
 
     thread = threading.Thread(target=_run_retrain, daemon=True)
     thread.start()
 
     return jsonify({
         "status":  "accepted",
-        "message": "CT/CM pipeline started - drift detection + GRU retraining running in background",
+        "message": "CT/CM pipeline started - drift detection running, retraining triggered only if drift detected",
     }), 202
 
 

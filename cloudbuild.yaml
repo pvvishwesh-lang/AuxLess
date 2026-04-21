@@ -1,4 +1,7 @@
 steps:
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args: ["auth", "configure-docker", "europe-west1-docker.pkg.dev"]
   - name: gcr.io/cloud-builders/docker
     args: ["build", "-t", "europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/auxless/auxless-git", "."]
   - name: gcr.io/cloud-builders/docker

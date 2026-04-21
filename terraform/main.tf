@@ -642,7 +642,7 @@ resource "google_monitoring_alert_policy" "gru_val_loss_alert" {
     }
   }
 
-  notification_channels = []
+  notification_channels = [google_monitoring_notification_channel.email_alerts.id]
 
   alert_strategy {
     auto_close = "604800s"
@@ -671,7 +671,7 @@ resource "google_monitoring_alert_policy" "genre_drift_alert" {
     }
   }
 
-  notification_channels = []
+  notification_channels = [google_monitoring_notification_channel.email_alerts.id]
 
   alert_strategy {
     auto_close = "604800s"
@@ -705,6 +705,17 @@ resource "google_monitoring_uptime_check_config" "auxless_health" {
     google_cloud_run_v2_service.auxless_api,
     google_project_service.ct_cm_apis,
   ]
+}
+
+# Email notification channel for CT/CM alerts
+resource "google_monitoring_notification_channel" "email_alerts" {
+  display_name = "AuxLess Email Alerts"
+  type         = "email"
+  project      = var.project_id
+
+  labels = {
+    email_address = "yellapragada.n@northeastern.edu"
+  }
 }
 
 # ── Outputs ───────────────────────────────────────────────────────────────────

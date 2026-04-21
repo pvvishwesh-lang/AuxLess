@@ -130,16 +130,15 @@ def publish_drift_metrics(kl_score: float, drift_detected: bool):
     try:
         client  = monitoring_v3.MetricServiceClient()
         project = f"projects/{PROJECT_ID}"
-        now     = time.time()
+        now     = int(time.time())
+
+        interval = monitoring_v3.TimeInterval({"end_time": {"seconds": now}})
+        point    = monitoring_v3.Point({"interval": interval, "value": {"double_value": kl_score}})
 
         series = monitoring_v3.TimeSeries()
         series.metric.type = "custom.googleapis.com/auxless/genre_drift_kl"
         series.resource.type = "global"
         series.resource.labels["project_id"] = PROJECT_ID
-
-        point = monitoring_v3.Point()
-        point.value.double_value = kl_score
-        point.interval.end_time.seconds = int(now)
         series.points = [point]
 
         client.create_time_series(name=project, time_series=[series])
@@ -212,16 +211,16 @@ def run_drift_detection() -> dict:
     drifted_genres.sort(key=lambda x: -x["deviation"])
 
     result = {
-        "status":                "completed",
-        "drift_detected":        drift_detected,
-        "kl_divergence":         kl_score,
-        "threshold":             DRIFT_THRESHOLD_KL,
+        "status":                  "completed",
+        "drift_detected":          drift_detected,
+        "kl_divergence":           kl_score,
+        "threshold":               DRIFT_THRESHOLD_KL,
         "production_distribution": production_dist,
-        "training_distribution": TRAINING_GENRE_DISTRIBUTION,
-        "top_drifted_genres":    drifted_genres[:5],
-        "recommendation":        "Trigger retraining" if drift_detected
-                                 else "No retraining needed",
-        "timestamp":             datetime.utcnow().isoformat(),
+        "training_distribution":   TRAINING_GENRE_DISTRIBUTION,
+        "top_drifted_genres":      drifted_genres[:5],
+        "recommendation":          "Trigger retraining" if drift_detected
+                                   else "No retraining needed",
+        "timestamp":               datetime.utcnow().isoformat(),
     }
 
     # step 5: publish and log

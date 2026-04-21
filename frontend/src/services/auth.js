@@ -26,9 +26,7 @@ export const signInWithGoogle = async () => {
   const token = await user.getIdToken();
   localStorage.setItem('auxless_jwt', token);
 
-  if (refreshToken) {
-    localStorage.setItem('auxless_refresh_token', refreshToken);
-  }
+  // Do not store OAuth refresh tokens in client-side localStorage.
 
   const userRef = doc(db, 'users', user.uid);
   const snap    = await getDoc(userRef);

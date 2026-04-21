@@ -153,6 +153,90 @@ Feedback scoring: like (+2.0), replay (+1.5), skip (-0.5), dislike (-2.0). Score
 
 The full automated flow: developer pushes code, GitHub Actions runs tests, Cloud Build builds and deploys, Cloud Run restarts with the new image, Pub/Sub subscription is already pointing at the endpoint.
 
+## Continuous Training & Monitoring (CT/CM)
+
+AuxLess implements a full CT/CM pipeline to detect data drift and automatically retrain the GRU model as real session data accumulates.
+
+### Data Drift Detection (`ml/ct_cm/drift_detector.py`)
+
+Drift is detected by comparing the genre distribution of real production sessions against the training genre distribution using KL divergence.
+
+**Training distribution** reflects the genre mix in the BigQuery catalog used during synthetic GRU training (chill: 15%, energize: 12%, commute: 11%, ...).
+
+**Production distribution** is computed from Firestore `song_events` across all completed sessions in the last 7 days.
+
+**KL divergence** measures how much the production distribution has shifted:
+- KL = 0.0 → identical distributions, no drift
+- KL > 0.3 → significant drift, retraining recommended
+
+Current production KL = 1.2844 (drift detected — users are listening to more energize and commute songs than the training distribution expected).
+
+Results are written to Firestore `drift_events` and published to Cloud Monitoring as `custom.googleapis.com/auxless/genre_drift_kl`.
+
+### Continuous Training (`ml/ct_cm/retrain.py`)
+
+When triggered, the CT pipeline:
+
+1. Fetches real play sequences from Firestore `song_events` (completed sessions, 5+ songs)
+2. Builds training samples using the same subsequence format as synthetic training
+3. Splits 90/10 train/val and retrains GRU using `train()` from `train_gru.py`
+4. Compares new val_loss against production model val_loss (from GCS `retrain_history.json`)
+5. Deploys new model to GCS only if improvement > 0.01 (1%) — prevents regression
+6. Backs up current model before deploying
+7. Publishes val_loss to Cloud Monitoring as `custom.googleapis.com/auxless/gru_val_loss`
+8. Writes result to Firestore `retrain_events`
+
+Minimum 50 real sessions required before retraining is attempted. Currently skipping — 9 sessions available.
+
+### Trigger Endpoint
+
+```
+POST /retrain
+```
+
+Runs drift detection then retraining in a background thread. Returns 202 immediately. Called by Cloud Scheduler every 3 days at 2am UTC.
+
+Manual trigger:
+```bash
+curl -X POST https://auxless-api-863487778360.europe-west1.run.app/retrain
+```
+
+### Cloud Scheduler
+
+```
+Job:             auxless-gru-retrain
+Schedule:        0 2 */3 * * (every 3 days at 2am UTC)
+Target:          POST /retrain on Cloud Run
+Service Account: auxless-scheduler-sa
+```
+
+### Cloud Monitoring
+
+| Metric | Type | Alert Threshold |
+|---|---|---|
+| `custom.googleapis.com/auxless/gru_val_loss` | GRU validation loss | > 0.5 |
+| `custom.googleapis.com/auxless/genre_drift_kl` | KL divergence | > 0.3 |
+
+Both alert policies send email notifications to the team when thresholds are exceeded. Uptime check pings `/monitoring/health` every 5 minutes.
+
+### Health Endpoint
+
+```
+GET /monitoring/health
+```
+
+Returns Firestore connectivity status. Used by Cloud Monitoring uptime check.
+
+### Infrastructure (`terraform/main.tf`)
+
+All CT/CM infrastructure is provisioned via Terraform:
+- `google_cloud_scheduler_job.gru_retrain`
+- `google_monitoring_alert_policy.gru_val_loss_alert`
+- `google_monitoring_alert_policy.genre_drift_alert`
+- `google_monitoring_uptime_check_config.auxless_health`
+- `google_monitoring_notification_channel.email_alerts`
+- `google_service_account.scheduler_sa`
+
 ## Deployment
 
 | Component | Service |
@@ -163,6 +247,10 @@ The full automated flow: developer pushes code, GitHub Actions runs tests, Cloud
 | Session State | Firestore (`auxless` database) |
 | Model Storage | GCS (`gs://youtube-pipeline-staging-bucket/models/gru_model.pt`) |
 | Event Trigger | Pub/Sub (`SESSION_READY_TOPIC` with push subscription to `/ml`) |
+| CT/CM Trigger | Cloud Scheduler (`auxless-gru-retrain`, every 3 days) |
+| Drift Detection | Firestore `drift_events` + Cloud Monitoring `genre_drift_kl` |
+| Retraining Events | Firestore `retrain_events` + Cloud Monitoring `gru_val_loss` |
+| Alerts | Cloud Monitoring alert policies + email notifications |
 
 ## Model Versioning and Rollback
 
@@ -185,6 +273,8 @@ If the model fails to load at session start, the system gracefully falls back to
 | test_rec_bigquery_client.py | 35 | 99% |
 | test_firestore_client.py | 53 | 100% |
 | test_model_bias.py | 33 | model bias evaluation |
+| test_drift_detector.py | 14 | 72% |
+| test_retrain.py | 20 | 55% |
 | **Total** | **451 passed, 11 skipped** | **75.15%** |
 
 GCP-dependent tests are skipped in CI and run locally against real services.
@@ -212,14 +302,16 @@ ml/
 │   ├── bigquery_client.py            # Song catalog + user preferences
 │   ├── firestore_client.py           # Session state reads
 │   └── cf/CF.py                       # Collaborative filtering (co-occurrence + fallback)
-└── evaluation/
-    └── model_bias.py                  # Genre, popularity, score disparity checks
+├── evaluation/
+│   └── model_bias.py                  # Genre, popularity, score disparity checks
+└── ct_cm/
+    ├── drift_detector.py              # KL divergence genre drift detection
+    └── retrain.py                     # GRU retraining on real session data
 ```
 
 ## Future Work
 
-- Retrain GRU on real session data once sufficient usage is collected
+- Retrain GRU on real session data once 50+ sessions are collected (CT pipeline is deployed and waiting)
 - Redis caching for the 81K embedding catalog
-- Automated retraining via Cloud Scheduler on a weekly cadence
 - A/B testing framework to compare model versions in production
 - SHAP analysis for deeper embedding interpretability

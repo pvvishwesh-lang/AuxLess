@@ -622,63 +622,54 @@ resource "google_cloud_scheduler_job" "gru_retrain" {
   ]
 }
 
-# Cloud Monitoring — alert when GRU val_loss degrades
-resource "google_monitoring_alert_policy" "gru_val_loss_alert" {
-  display_name = "AuxLess — GRU Val Loss Degradation"
-  combiner     = "OR"
+# NOTE: Commented out — custom metrics must exist before alert policies.
+# After terraform apply succeeds, create metrics then uncomment and re-apply.
+#
+# resource "google_monitoring_alert_policy" "gru_val_loss_alert" {
+#   display_name = "AuxLess — GRU Val Loss Degradation"
+#   combiner     = "OR"
+#   conditions {
+#     display_name = "GRU val_loss exceeds 0.5"
+#     condition_threshold {
+#       filter          = "metric.type=\"custom.googleapis.com/auxless/gru_val_loss\" AND resource.type=\"global\""
+#       duration        = "0s"
+#       comparison      = "COMPARISON_GT"
+#       threshold_value = 0.5
+#       aggregations {
+#         alignment_period   = "3600s"
+#         per_series_aligner = "ALIGN_MEAN"
+#       }
+#     }
+#   }
+#   notification_channels = [google_monitoring_notification_channel.email_alerts.id]
+#   alert_strategy {
+#     auto_close = "604800s"
+#   }
+#   depends_on = [google_project_service.ct_cm_apis]
+# }
 
-  conditions {
-    display_name = "GRU val_loss exceeds 0.5"
-    condition_threshold {
-      filter          = "metric.type=\"custom.googleapis.com/auxless/gru_val_loss\" AND resource.type=\"global\""
-      duration        = "0s"
-      comparison      = "COMPARISON_GT"
-      threshold_value = 0.5
-
-      aggregations {
-        alignment_period   = "3600s"
-        per_series_aligner = "ALIGN_MEAN"
-      }
-    }
-  }
-
-  notification_channels = [google_monitoring_notification_channel.email_alerts.id]
-
-  alert_strategy {
-    auto_close = "604800s"
-  }
-
-  depends_on = [google_project_service.ct_cm_apis]
-}
-
-# Cloud Monitoring — alert when genre drift is detected
-resource "google_monitoring_alert_policy" "genre_drift_alert" {
-  display_name = "AuxLess — Genre Distribution Drift Detected"
-  combiner     = "OR"
-
-  conditions {
-    display_name = "KL divergence exceeds drift threshold"
-    condition_threshold {
-      filter          = "metric.type=\"custom.googleapis.com/auxless/genre_drift_kl\" AND resource.type=\"global\""
-      duration        = "0s"
-      comparison      = "COMPARISON_GT"
-      threshold_value = 0.3
-
-      aggregations {
-        alignment_period   = "86400s"
-        per_series_aligner = "ALIGN_MEAN"
-      }
-    }
-  }
-
-  notification_channels = [google_monitoring_notification_channel.email_alerts.id]
-
-  alert_strategy {
-    auto_close = "604800s"
-  }
-
-  depends_on = [google_project_service.ct_cm_apis]
-}
+# resource "google_monitoring_alert_policy" "genre_drift_alert" {
+#   display_name = "AuxLess — Genre Distribution Drift Detected"
+#   combiner     = "OR"
+#   conditions {
+#     display_name = "KL divergence exceeds drift threshold"
+#     condition_threshold {
+#       filter          = "metric.type=\"custom.googleapis.com/auxless/genre_drift_kl\" AND resource.type=\"global\""
+#       duration        = "0s"
+#       comparison      = "COMPARISON_GT"
+#       threshold_value = 0.3
+#       aggregations {
+#         alignment_period   = "86400s"
+#         per_series_aligner = "ALIGN_MEAN"
+#       }
+#     }
+#   }
+#   notification_channels = [google_monitoring_notification_channel.email_alerts.id]
+#   alert_strategy {
+#     auto_close = "604800s"
+#   }
+#   depends_on = [google_project_service.ct_cm_apis]
+# }
 
 # Cloud Monitoring — uptime check on /monitoring/health
 resource "google_monitoring_uptime_check_config" "auxless_health" {

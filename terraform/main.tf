@@ -563,6 +563,150 @@ resource "google_cloudfunctions2_function" "streaming_trigger" {
    #depends_on = [google_project_service.apis]
  #}
 
+# ── CT/CM Infrastructure ──────────────────────────────────────────────────────
+
+# Enable required APIs for CT/CM
+resource "google_project_service" "ct_cm_apis" {
+  for_each = toset([
+    "cloudscheduler.googleapis.com",
+    "monitoring.googleapis.com",
+  ])
+  service                    = each.key
+  disable_on_destroy         = false
+  disable_dependent_services = false
+}
+
+# Service account for Cloud Scheduler to invoke Cloud Run
+resource "google_service_account" "scheduler_sa" {
+  account_id   = "auxless-scheduler-sa"
+  display_name = "AuxLess Cloud Scheduler Service Account"
+}
+
+resource "google_cloud_run_v2_service_iam_member" "scheduler_invoker" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.auxless_api.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.scheduler_sa.email}"
+}
+
+# Cloud Scheduler — triggers GRU retraining every 3 days at 2am UTC
+resource "google_cloud_scheduler_job" "gru_retrain" {
+  name        = "auxless-gru-retrain"
+  description = "Triggers GRU retraining pipeline every 3 days"
+  schedule    = "0 2 */3 * *"
+  time_zone   = "UTC"
+  region      = "us-central1"
+
+  http_target {
+    uri         = "${google_cloud_run_v2_service.auxless_api.uri}/retrain"
+    http_method = "POST"
+
+    oidc_token {
+      service_account_email = google_service_account.scheduler_sa.email
+    }
+
+    headers = {
+      "Content-Type" = "application/json"
+    }
+
+    body = base64encode(jsonencode({
+      trigger = "cloud_scheduler"
+    }))
+  }
+
+  depends_on = [
+    google_cloud_run_v2_service.auxless_api,
+    google_cloud_run_v2_service_iam_member.scheduler_invoker,
+    google_project_service.ct_cm_apis,
+  ]
+}
+
+# Cloud Monitoring — alert when GRU val_loss degrades
+resource "google_monitoring_alert_policy" "gru_val_loss_alert" {
+  display_name = "AuxLess — GRU Val Loss Degradation"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "GRU val_loss exceeds 0.5"
+    condition_threshold {
+      filter          = "metric.type=\"custom.googleapis.com/auxless/gru_val_loss\" AND resource.type=\"global\""
+      duration        = "0s"
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0.5
+
+      aggregations {
+        alignment_period   = "3600s"
+        per_series_aligner = "ALIGN_MEAN"
+      }
+    }
+  }
+
+  notification_channels = []
+
+  alert_strategy {
+    auto_close = "604800s"
+  }
+
+  depends_on = [google_project_service.ct_cm_apis]
+}
+
+# Cloud Monitoring — alert when genre drift is detected
+resource "google_monitoring_alert_policy" "genre_drift_alert" {
+  display_name = "AuxLess — Genre Distribution Drift Detected"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "KL divergence exceeds drift threshold"
+    condition_threshold {
+      filter          = "metric.type=\"custom.googleapis.com/auxless/genre_drift_kl\" AND resource.type=\"global\""
+      duration        = "0s"
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0.3
+
+      aggregations {
+        alignment_period   = "86400s"
+        per_series_aligner = "ALIGN_MEAN"
+      }
+    }
+  }
+
+  notification_channels = []
+
+  alert_strategy {
+    auto_close = "604800s"
+  }
+
+  depends_on = [google_project_service.ct_cm_apis]
+}
+
+# Cloud Monitoring — uptime check on /monitoring/health
+resource "google_monitoring_uptime_check_config" "auxless_health" {
+  display_name = "AuxLess API Health Check"
+  timeout      = "10s"
+  period       = "300s"
+
+  http_check {
+    path         = "/monitoring/health"
+    port         = 443
+    use_ssl      = true
+    validate_ssl = true
+  }
+
+  monitored_resource {
+    type = "uptime_url"
+    labels = {
+      project_id = var.project_id
+      host       = replace(google_cloud_run_v2_service.auxless_api.uri, "https://", "")
+    }
+  }
+
+  depends_on = [
+    google_cloud_run_v2_service.auxless_api,
+    google_project_service.ct_cm_apis,
+  ]
+}
+
 # ── Outputs ───────────────────────────────────────────────────────────────────
 
 output "cloud_run_url" {
